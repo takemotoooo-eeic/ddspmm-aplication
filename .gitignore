@@ -2,4 +2,4 @@ __pycache__/*
 ddsp/__pycache__
 **/__pycache__/
 .env
-backend.egg-info/*
+**/backend.egg-info/
