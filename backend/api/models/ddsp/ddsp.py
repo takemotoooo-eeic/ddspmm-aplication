@@ -1,0 +1,261 @@
+import io
+import json
+import os
+
+import numpy as np
+import soundfile
+import torch
+import tqdm
+import wandb
+from pydantic import BaseModel
+
+from api.config import LossConfig, ModelConfig, PreprocessConfig, TrainConfig
+from api.libs.logging import get_logger
+from api.libs.midi import convert_midi_to_features
+from api.libs.wav import preprocess_wav_file, reshape_to_segments
+from api.models.ddsp.loss import Loss, LossInputs
+from api.models.midi_aligner.midi_aligner import AlignedMidi
+
+from .load_model import load_model
+from .model import DDSP, DDSP_Decoder, Z_Encoder
+
+MODEL_WEIGHTS_PATH = "api/models/ddsp/weights/best_model.pth"
+MODEL_CONFIG_PATH = "api/models/ddsp/config/model.config.yaml"
+PRETRAIN_CONFIG_PATH = "api/models/ddsp/config/pretrain.config.yaml"
+LOUDNESS_PATH = "api/models/ddsp/statistics/loudness.json"
+
+
+class TrainInput(BaseModel):
+    wav_file: bytes
+    num_instruments: int
+    midi: list[AlignedMidi]
+
+
+class Feature(BaseModel):
+    pitch: list[float]
+    loudness: list[float]
+    z_feature: list[list[float]]
+
+
+class TrainOutput(BaseModel):
+    features: list[Feature]
+
+
+class DDSPModel:
+    def __init__(
+        self,
+    ):
+        self.logger = get_logger()
+        model_config: ModelConfig = ModelConfig.from_config_path(MODEL_CONFIG_PATH)
+        self.model: DDSP = load_model(MODEL_WEIGHTS_PATH, self.device, model_config)
+        self.encoder = self.model.z_encoder
+        self.decoder = self.model.decoder
+        decoder_params = sum(p.numel() for p in self.decoder.parameters())
+        self.logger.info(f"decoder_params: {decoder_params}")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+
+    def _initialize_input(
+        self,
+        encoder: Z_Encoder,
+        train_input: TrainInput,
+        preprocess_config: PreprocessConfig,
+        mean_loudness: float,
+        std_loudness: float,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        signal_mix, _, loudness_mix = preprocess_wav_file(
+            train_input.wav_file_path, preprocess_config, self.device
+        )
+        z: torch.Tensor = encoder(signal_mix.unsqueeze(0))
+        z = z.squeeze(0)
+        z_features, pitches, loudnesses = [], [], []
+        for midi in train_input.midi:
+            pitch: torch.Tensor
+            loudness: torch.Tensor
+            mask: torch.Tensor
+            pitch, loudness, mask = convert_midi_to_features(
+                midi,
+                loudness_mix,
+                preprocess_config.sampling_rate,
+                signal_mix.shape[0],
+                preprocess_config.block_size,
+                self.device,
+            )
+            z_feature = torch.randn(pitch.shape[0], 16, device=self.device).float()
+            z_mean = torch.mean(z[mask == 0], dim=0)
+            z_feature[mask == 0] = z_mean
+
+            output = reshape_to_segments(
+                {
+                    "pitch": pitch,
+                    "loudness": loudness,
+                    "z_feature": z_feature,
+                },
+                preprocess_config.signal_length,
+            )
+            loudness = output["loudness"].unsqueeze(-1)
+            pitch = output["pitch"].unsqueeze(-1)
+            z_feature = output["z_feature"]
+            z_features.append(z_feature)
+            pitches.append(pitch)
+            loudnesses.append(loudness)
+
+        pitches = torch.stack(pitches).to(self.device).detach().requires_grad_(True)
+        loudnesses = torch.stack(loudnesses).to(self.device)
+        loudnesses = (loudnesses - mean_loudness) / std_loudness
+        loudnesses = loudnesses.detach().requires_grad_(True)
+        z_features = (
+            torch.stack(z_features).to(self.device).detach().requires_grad_(True)
+        )
+        return signal_mix, z_features, pitches, loudnesses
+
+    def _train(
+        self,
+        model: DDSP_Decoder,
+        reference_audio: torch.Tensor,
+        z_features: torch.Tensor,
+        pitches: torch.Tensor,
+        loudnesses: torch.Tensor,
+        train_config: TrainConfig,
+        loss_config: LossConfig,
+        preprocess_config: PreprocessConfig,
+        num_instruments: int,
+    ) -> TrainOutput:
+        optimizer = torch.optim.Adam(
+            [z_features, pitches, loudnesses], lr=train_config.lr
+        )
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=[2000, 3000], gamma=0.1
+        )
+        loss_fn = Loss(self.device, loss_config)
+        epochs: int = train_config.epochs
+        print(f"epochs: {epochs}")
+        pbar = tqdm(range(epochs), desc="Training")
+        for epoch in pbar:
+            optimizer.zero_grad()
+            signals = []
+            for i in range(num_instruments):
+                signal, *_ = model(pitches[i], loudnesses[i], z_features[i])
+                signal = signal.squeeze(-1)
+                signals.append(signal)
+
+            signal_mix = torch.stack(signals)
+            signal_mix = signal_mix.sum(dim=0).squeeze(0)
+
+            loss_inputs = LossInputs.from_results(
+                loss_config=loss_config,
+                signal_pred=signal_mix,
+                signal_target=reference_audio,
+                loudness=loudnesses,
+                pitch=pitches,
+                z_feature=z_features,
+            )
+            loss: torch.Tensor = loss_fn(loss_inputs)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            pbar.set_postfix({"loss": loss.item()})
+            wandb.log({"loss": loss.item()}, step=epoch)
+            if (epoch + 1) % 100 == 0:
+                for i in range(num_instruments):
+                    wandb.log(
+                        {
+                            f"instrument_{i}/generated_audio": wandb.Audio(
+                                signals[i].reshape(-1).detach().cpu().numpy(),
+                                sample_rate=preprocess_config.sampling_rate,
+                            ),
+                        },
+                        step=epoch,
+                    )
+        # 最後にwav、features、metricsを保存
+        signals = []
+        for i in range(num_instruments):
+            signal, *_ = model(pitches[i], loudnesses[i], z_features[i])
+            signal = signal.squeeze(-1)
+            signals.append(signal)
+        signal_mix = torch.stack(signals)
+        signal_mix = signal_mix.sum(dim=0)
+        wandb.finish()
+
+        return TrainOutput(
+            features=[
+                Feature(
+                    z_feature=z_features[i].reshape(-1).detach().cpu().numpy().tolist(),
+                    pitch=pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
+                    loudness=loudnesses[i].reshape(-1).detach().cpu().numpy().tolist(),
+                )
+                for i in range(num_instruments)
+            ],
+        )
+
+    def train(self, train_input: TrainInput) -> TrainOutput:
+        self.logger.info("Start training...")
+        wandb.init(
+            project="si-ddspmm-sync-api",
+            name=os.path.basename(train_input.wav_file),
+            config=train_input,
+        )
+        train_config = TrainConfig.from_config_path(PRETRAIN_CONFIG_PATH)
+        loss_config = LossConfig.from_config_path(PRETRAIN_CONFIG_PATH)
+        preprocess_config = PreprocessConfig.from_config_path(PRETRAIN_CONFIG_PATH)
+
+        with open(LOUDNESS_PATH, "r") as f:
+            loudness_config = json.load(f)
+        mean_loudness = loudness_config["mean"]
+        std_loudness = loudness_config["std"]
+
+        reference_audio, z_features, pitches, loudnesses = self._initialize_input(
+            train_input, preprocess_config, mean_loudness, std_loudness
+        )
+        return self._train(
+            model=self.decoder,
+            reference_audio=reference_audio,
+            z_features=z_features,
+            pitches=pitches,
+            loudnesses=loudnesses,
+            train_config=train_config,
+            loss_config=loss_config,
+            preprocess_config=preprocess_config,
+            num_instruments=train_input.num_instruments,
+        )
+
+    def generate(
+        self,
+        pitch: list[float],
+        loudness: list[float],
+        z_feature: list[list[float]],
+    ) -> bytes:
+        preprocess_config = PreprocessConfig.from_config_path(PRETRAIN_CONFIG_PATH)
+        with open(LOUDNESS_PATH, "r") as f:
+            loudness_config = json.load(f)
+        mean_loudness = loudness_config["mean"]
+        std_loudness = loudness_config["std"]
+
+        pitch_i = torch.tensor(pitch, dtype=torch.float32, device=self.device)
+        loudness_i = torch.tensor(loudness, dtype=torch.float32, device=self.device)
+        z_feature_i = torch.tensor(z_feature, dtype=torch.float32, device=self.device)
+
+        output = reshape_to_segments(
+            {
+                "pitch": pitch_i,
+                "loudness": loudness_i,
+                "z_feature": z_feature_i,
+            },
+            preprocess_config.signal_length,
+        )
+        pitch_i = output["pitch"].unsqueeze(-1)
+        loudness_i = output["loudness"].unsqueeze(-1)
+        z_feature_i = output["z_feature"]
+
+        loudness_i = (loudness_i - mean_loudness) / std_loudness
+
+        with torch.no_grad():
+            signal, *_ = self.decoder(pitch_i, loudness_i, z_feature_i)
+            signal = signal.squeeze(-1).cpu().numpy().tolist()
+        buffer = io.BytesIO()
+        signal_np = signal.reshape(-1).detach().cpu().numpy().astype(np.float32)
+        soundfile.write(
+            buffer, signal_np, samplerate=preprocess_config.sampling_rate, format="WAV"
+        )
+        buffer.seek(0)
+        return buffer.read()

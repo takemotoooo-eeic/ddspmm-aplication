@@ -1,0 +1,162 @@
+components:
+  schemas:
+    Body_ddsp_train_api_ddsp_train_post:
+      properties:
+        midi_file:
+          description: MIDIファイル
+          format: binary
+          title: Midi File
+          type: string
+        wav_file:
+          description: WAVファイル
+          format: binary
+          title: Wav File
+          type: string
+      required:
+      - wav_file
+      - midi_file
+      title: Body_ddsp_train_api_ddsp_train_post
+      type: object
+    DDSPGenerateParams:
+      properties:
+        loudness:
+          items:
+            type: number
+          title: Loudness
+          type: array
+        pitch:
+          items:
+            type: number
+          title: Pitch
+          type: array
+        z_feature:
+          items:
+            items:
+              type: number
+            type: array
+          title: Z Feature
+          type: array
+      required:
+      - pitch
+      - loudness
+      - z_feature
+      title: DDSPGenerateParams
+      type: object
+    Feature:
+      properties:
+        loudness:
+          items:
+            type: number
+          title: Loudness
+          type: array
+        pitch:
+          items:
+            type: number
+          title: Pitch
+          type: array
+        z_feature:
+          items:
+            items:
+              type: number
+            type: array
+          title: Z Feature
+          type: array
+      required:
+      - pitch
+      - loudness
+      - z_feature
+      title: Feature
+      type: object
+    Features:
+      properties:
+        features:
+          items:
+            $ref: '#/components/schemas/Feature'
+          title: Features
+          type: array
+      required:
+      - features
+      title: Features
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+info:
+  title: backend_api
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /ddsp/generate:
+    post:
+      operationId: DdspGenerateApi
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DDSPGenerateParams'
+        required: true
+      responses:
+        '200':
+          content:
+            audio/wav:
+              schema:
+                format: binary
+                type: string
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ddsp Generate Api
+  /ddsp/train:
+    post:
+      operationId: DdspTrainApi
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_ddsp_train_api_ddsp_train_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Features'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ddsp Train Api

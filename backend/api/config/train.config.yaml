@@ -1,0 +1,20 @@
+train:
+  data_dir: urmp_separate_dataset/
+  statistics_dir: pretrain_dataset/statistics/
+  batch_size: 16
+  epochs: 2000
+  lr: 1e-1
+  debug: true
+
+loss:
+  - type: "mel"
+    ratio: 1.0
+    scales: [4096, 2048, 1024, 512, 256, 128]
+    overlap: 0.75
+  # - type: "td"
+  #   ratio: 0.5
+  #   target: "loudness"
+  #   alpha: 
+  # - type: "fd"
+  #   target: "pitch"
+  #   ratio: 0.5
