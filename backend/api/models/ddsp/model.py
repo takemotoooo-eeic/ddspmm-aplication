@@ -1,9 +1,19 @@
+import math
+
 import torch
 import torch.nn as nn
-from .core import mlp, gru, scale_function, remove_above_nyquist, upsample
-from .core import harmonic_synth, amp_to_impulse_response, fft_convolve
-import math
 import torchaudio
+
+from .core import (
+    amp_to_impulse_response,
+    fft_convolve,
+    gru,
+    harmonic_synth,
+    mlp,
+    remove_above_nyquist,
+    scale_function,
+    upsample,
+)
 
 
 class Reverb(nn.Module):

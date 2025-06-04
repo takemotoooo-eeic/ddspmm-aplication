@@ -1,0 +1,9 @@
+preprocess:
+  data_location: "URMP_Dataset"
+  extension: "wav"
+  sampling_rate: 16000
+  signal_length: 192000
+  block_size: 512 # must be a power of 2 if using realtime
+  oneshot: false # crop every audio file to exactly signal length
+  out_dir: "pretrain_dataset/"
+  statistics_dir: "pretrain_dataset/statistics/"
