@@ -61,8 +61,15 @@ class MidiAligner:
         midi_buffer.seek(0)
         midi_data = pretty_midi.PrettyMIDI(midi_buffer)
         rows = []
+        instrument_name_count = {}
         for instrument in midi_data.instruments:
-            instrument_name = pretty_midi.program_to_instrument_name(instrument.program)
+            base_name = pretty_midi.program_to_instrument_name(instrument.program)
+            if base_name in instrument_name_count:
+                instrument_name_count[base_name] += 1
+                instrument_name = f"{base_name}_{instrument_name_count[base_name]}"
+            else:
+                instrument_name_count[base_name] = 0
+                instrument_name = base_name
             for note in instrument.notes:
                 start = round(note.start, 6)
                 duration = round(note.end - note.start, 6)
@@ -71,7 +78,7 @@ class MidiAligner:
                 rows.append([start, duration, pitch, velocity, instrument_name])
 
         df = pd.DataFrame(
-            rows, columns=["Start", "Duration", "Pitch", "Velocity", "Instrument"]
+            rows, columns=["start", "duration", "pitch", "velocity", "instrument"]
         )
         return df
 
@@ -154,7 +161,8 @@ class MidiAligner:
         self.logger.info(f"start_sec: {start_sec}")
 
         df_annotation: pd.DataFrame = self._convert_midi_to_dataframe(midi_file)
-        num_instruments = len(df_annotation["Instrument"].unique())
+        num_instruments = len(df_annotation["instrument"].unique())
+        self.logger.info(f"num_instruments: {num_instruments}")
 
         tuning_offset = estimate_tuning(audio_trim, self.sr)
         self.logger.info(
@@ -169,9 +177,9 @@ class MidiAligner:
         )
 
         aligned_midi_list: list[AlignedMidi] = []
-        for instrument, df_inst in df_annotation.groupby("Instrument"):
+        for instrument, df_inst in df_annotation.groupby("instrument"):
             self.logger.info(f"Processing instrument: {instrument}")
-            # インデックスをリセット
+
             df_inst = df_inst.reset_index(drop=True)
             f_chroma_quantized_annotation, f_DLNCO_annotation = (
                 self._get_features_from_annotation(
@@ -218,18 +226,18 @@ class MidiAligner:
             )
 
             tuning_multiplier = 2 ** (tuning_offset / 1200.0)
-            df_annotation_warped["Frequency"] = (
+            df_annotation_warped["frequency"] = (
                 440.0
                 * 2 ** ((df_annotation_warped["pitch"] - 69) / 12.0)
                 * tuning_multiplier
             )
 
-            out_df = df_annotation_warped[["start", "Frequency", "duration"]]
+            out_df = df_annotation_warped[["start", "frequency", "duration"]]
             aligned_midi = AlignedMidi(
                 notes=[
                     Note(
                         start=row["start"] + start_sec,
-                        frequency=row["Frequency"],
+                        frequency=row["frequency"],
                         duration=row["duration"],
                     )
                     for _, row in out_df.iterrows()

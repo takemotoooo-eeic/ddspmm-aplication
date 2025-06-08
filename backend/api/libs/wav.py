@@ -8,6 +8,7 @@ from fastapi import UploadFile
 
 from api.config import PreprocessConfig
 from api.libs.exceptions import BadRequest
+from io import BytesIO
 
 
 def verify_wav_file_format(file: UploadFile) -> None:
@@ -68,9 +69,9 @@ def extract_pitch(
     return f0, confidence
 
 def preprocess_wav_file(
-    file_path: str, preprocess_config: PreprocessConfig, device: torch.device
+    wav_file: bytes, preprocess_config: PreprocessConfig, device: torch.device
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    signal, _ = librosa.load(file_path, sr=preprocess_config.sampling_rate)
+    signal, _ = librosa.load(BytesIO(wav_file), sr=preprocess_config.sampling_rate)
     N: int = (
         preprocess_config.signal_length - len(signal) % preprocess_config.signal_length
     ) % preprocess_config.signal_length

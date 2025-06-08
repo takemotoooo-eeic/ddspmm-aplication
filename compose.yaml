@@ -12,8 +12,8 @@ services:
       - PYTHONPATH=/app
     command: |
       sh -c "
-        uv pip install -e . && \
-        uvicorn api.main:app --host 0.0.0.0 --port 8888 --reload
+        uv pip install --system -e . && \
+        uvicorn api.app:app --host 0.0.0.0 --port 8888 --reload
       "
     deploy:
       resources:
