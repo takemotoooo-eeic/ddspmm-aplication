@@ -7,12 +7,13 @@ from api.libs.midi import verify_mid_file_format
 from api.libs.wav import verify_wav_file_format
 from api.models.ddsp import DDSPModel, TrainInput
 from api.models.midi_aligner import MidiAligner
+from io import BytesIO
 
 ddsp_router = APIRouter()
 
 
 @ddsp_router.post("/ddsp/train", response_model=models.Features)
-def ddsp_train_api(
+async def ddsp_train_api(
     wav_file: UploadFile = File(..., description="WAVファイル"),
     midi_file: UploadFile = File(..., description="MIDIファイル"),
 ):
@@ -20,8 +21,8 @@ def ddsp_train_api(
         verify_wav_file_format(wav_file)
         verify_mid_file_format(midi_file)
 
-        midi_file_bytes = midi_file.read()
-        wav_file_bytes = wav_file.read()
+        midi_file_bytes = await midi_file.read()
+        wav_file_bytes = await wav_file.read()
 
         midi_aligner = MidiAligner()
         aligned_midi_list, num_instruments = midi_aligner.align(
@@ -47,7 +48,7 @@ def ddsp_train_api(
         )
         return features
     except Exception as e:
-        raise BadRequest(str(e))
+        raise BadRequest(e)
 
 
 @ddsp_router.post(
@@ -56,10 +57,10 @@ def ddsp_train_api(
     response_class=WAVResponse,
 )
 def ddsp_generate_api(params: models.DDSPGenerateParams):
-    wav_data: bytes = DDSPModel.generate(
+    ddsp_model = DDSPModel()
+    wav_data: bytes = ddsp_model.generate(
         pitch=params.pitch,
         loudness=params.loudness,
         z_feature=params.z_feature,
-        num_instruments=params.num_instruments,
     )
-    return WAVResponse(content=wav_data)
+    return WAVResponse(content=BytesIO(wav_data))

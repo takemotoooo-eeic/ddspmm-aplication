@@ -14,7 +14,7 @@ train:
   debug: true
 
 loss:
-  type: "mel"
+  - type: "mel"
     ratio: 0.5
     scales: [4096,2048, 1024, 512, 256, 128]
     overlap: .75

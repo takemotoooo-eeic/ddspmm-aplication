@@ -45,3 +45,6 @@ build-backend = "setuptools.build_meta"
 dev = [
     "ruff>=0.11.12",
 ]
+
+[tool.setuptools]
+packages = ["api"]
