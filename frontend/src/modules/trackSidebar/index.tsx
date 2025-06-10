@@ -1,12 +1,14 @@
 import { Box, Typography } from '@mui/material';
 import { MuteButton } from '../../components/buttons/MuteButton';
 import { TrackData } from '../../types/trackData';
+import { VolumeSlider } from './volumeSlider';
 
 interface TrackSidebarProps {
   tracks: TrackData[];
   selectedTrackId: string | null;
   onTrackClick: (trackId: string) => void;
   onMuteToggle: (trackId: string) => void;
+  onVolumeChange: (trackId: string, volume: number) => void;
 }
 
 export const TrackSidebar = ({
@@ -14,6 +16,7 @@ export const TrackSidebar = ({
   selectedTrackId,
   onTrackClick,
   onMuteToggle,
+  onVolumeChange,
 }: TrackSidebarProps) => {
   return (
     <Box
@@ -47,10 +50,17 @@ export const TrackSidebar = ({
           onClick={() => onTrackClick(track.id)}
         >
           <Typography sx={{ color: '#fff', minWidth: 80 }}>{track.name}</Typography>
-          <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
+          <Box sx={{ display: 'flex', gap: 1, ml: 'auto', alignItems: 'center' }}>
+            <VolumeSlider
+              value={track.volume * 128}
+              onChange={(volume) => onVolumeChange(track.id, volume / 128)}
+            />
             <MuteButton
               isMuted={track.muted}
-              onClick={() => onMuteToggle(track.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMuteToggle(track.id);
+              }}
             />
           </Box>
         </Box>

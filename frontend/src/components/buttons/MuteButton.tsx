@@ -4,7 +4,7 @@ import { IconButton } from '@mui/material';
 
 interface MuteButtonProps {
   isMuted: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
 }
 
 export const MuteButton = ({ isMuted, onClick }: MuteButtonProps) => {

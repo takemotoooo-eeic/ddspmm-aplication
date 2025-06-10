@@ -51,6 +51,16 @@ export default function App() {
     );
   };
 
+  const handleVolumeChange = (trackId: string, volume: number) => {
+    setTracks(prevTracks =>
+      prevTracks.map(track =>
+        track.id === trackId
+          ? { ...track, volume }
+          : track
+      )
+    );
+  };
+
   const { trigger: trainTrigger } = useTrainDdsp();
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
   const {
@@ -125,6 +135,7 @@ export default function App() {
         selectedTrackId={selectedTrack}
         onTrackClick={handleTrackClick}
         onMuteToggle={handleMuteToggle}
+        onVolumeChange={handleVolumeChange}
       />
 
       {/* メインビューポート */}
