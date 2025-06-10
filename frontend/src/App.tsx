@@ -5,16 +5,18 @@ import {
   createTheme,
   CssBaseline,
   Dialog,
-  Drawer,
   ThemeProvider,
   Toolbar,
   Typography
 } from '@mui/material';
 import { useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
+import { WaveformDisplay } from './components/wavDisplay/WaveformDisplay';
 import { useDisclosure } from './hooks/useDisclosure';
-import { useTrainDdsp } from './orval/backend-api';
-import { BodyTrainDdspDdspTrainPost } from './orval/models/backend-api';
+import { TrackSidebar } from './modules/trackSidebar';
+import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
+import { BodyTrainDdspDdspTrainPost, DDSPGenerateParams } from './orval/models/backend-api';
+import { TrackData } from './types/trackData';
 
 // ダークテーマ
 const theme = createTheme({
@@ -32,12 +34,25 @@ const theme = createTheme({
 export default function App() {
   const [wavFile, setWavFile] = useState<File | null>(null);
   const [midFile, setMidFile] = useState<File | null>(null);
+  const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
 
   const handleTrackClick = (trackId: string) => {
     setSelectedTrack(trackId);
   };
+
+  const handleMuteToggle = (trackId: string) => {
+    setTracks(prevTracks =>
+      prevTracks.map(track =>
+        track.id === trackId
+          ? { ...track, muted: !track.muted }
+          : track
+      )
+    );
+  };
+
   const { trigger: trainTrigger } = useTrainDdsp();
+  const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
   const {
     isOpen: isOpenImportTracksDialog,
     open: openImportTracksDialog,
@@ -53,12 +68,33 @@ export default function App() {
     };
     try {
       const features = await trainTrigger(body);
-      console.log('Received features:', features);
+      const newTracks: TrackData[] = [];
+
+      for (const feature of features.features) {
+        const body: DDSPGenerateParams = {
+          z_feature: feature.z_feature,
+          loudness: feature.loudness,
+          pitch: feature.pitch,
+        };
+        const response = await generateAudioTrigger(body);
+        const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
+
+        newTracks.push({
+          id: `track-${Date.now()}-${Math.random()}`,
+          name: `Track ${tracks.length + newTracks.length + 1}`,
+          wavData: wavBlob,
+          features: feature,
+          muted: false,
+          volume: 1.0,
+        });
+      }
+
+      setTracks(prev => [...prev, ...newTracks]);
     } catch (e) {
       console.error('Training error:', e);
-    } finally {
-      closeImportTracksDialog();
     }
+
+    closeImportTracksDialog();
   };
   return (
     <ThemeProvider theme={theme}>
@@ -83,57 +119,43 @@ export default function App() {
       {/* ヘッダースペーサー */}
       <Toolbar />
 
+      {/* サイドバー：トラック一覧（固定表示） */}
+      <TrackSidebar
+        tracks={tracks}
+        selectedTrackId={selectedTrack}
+        onTrackClick={handleTrackClick}
+        onMuteToggle={handleMuteToggle}
+      />
+
       {/* メインビューポート */}
       <Box
         sx={{
           display: 'flex',
           flexGrow: 1,
           height: `calc(100vh - 64px)`, // AppBar の高さ分を引く
-          bgcolor: 'background.default'
+          bgcolor: 'background.default',
         }}
       >
-        {/* サイドバー：トラック一覧 */}
-        <Box
-          sx={{
-            width: 240,
-            bgcolor: 'background.paper',
-            p: 2,
-            overflowY: 'auto'
-          }}
-        >
-          {['Track 1', 'Track 2', 'Track 3'].map(track => (
-            <Box
-              key={track}
-              sx={{
-                height: 60,
-                bgcolor: '#1e1e1e',
-                borderRadius: 1,
-                mb: 1,
-                display: 'flex',
-                alignItems: 'center',
-                px: 2,
-                cursor: 'pointer',
-                '&:hover': { bgcolor: '#333' }
-              }}
-              onClick={() => handleTrackClick(track)}
-            >
-              <Typography sx={{ color: '#fff' }}>{track}</Typography>
-            </Box>
-          ))}
-        </Box>
-
         {/* タイムライン＋コントロールパネル */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, ml: '240px' }}>
           {/* 上部：タイムライン */}
           <Box
             sx={{
               flexGrow: 1,
               bgcolor: 'background.default',
               p: 2,
-              overflow: 'auto'
+              overflowX: 'auto', // 横スクロール
+              minWidth: 1200,    // 必要に応じて調整
             }}
           >
-            {/* 波形/オートメーション */}
+            {/* 各トラックの波形を縦に並べて表示 */}
+            {tracks.map(track => (
+              <Box key={track.id} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ width: 2000, height: 60, bgcolor: '#222', borderRadius: 1, overflow: 'hidden' }}>
+                  <WaveformDisplay wavData={track.wavData} width={2000} />
+                </Box>
+              </Box>
+            ))}
           </Box>
 
           {/* 下部：コントロールパネル */}
@@ -148,20 +170,6 @@ export default function App() {
             {/* コントロールモジュール */}
           </Box>
         </Box>
-
-        {/* 編集ウィンドウ（Drawer） */}
-        <Drawer
-          anchor="right"
-          open={Boolean(selectedTrack)}
-          onClose={() => setSelectedTrack(null)}
-        >
-          <Box sx={{ width: 320, bgcolor: 'background.paper', p: 3, height: '100%' }}>
-            <Typography variant="h6" sx={{ mb: 3 }}>
-              {selectedTrack} Editor
-            </Typography>
-            {/* エディタコンテンツ */}
-          </Box>
-        </Drawer>
 
         {/* トラックインポートダイアログ */}
         {
