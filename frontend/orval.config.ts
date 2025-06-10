@@ -3,7 +3,7 @@ import { defineConfig } from "orval";
 export default defineConfig({
   "backend-api": {
     input: {
-      target: "../backend/api/controllers/backend_api/openapi/openapi.yml",
+      target: "/opt/backend_api_openapi.yml",
     },
     output: {
       target: "./src/orval/backend-api.ts",
