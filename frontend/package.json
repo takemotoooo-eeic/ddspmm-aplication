@@ -16,9 +16,15 @@
     "clean:orval:backend-api": "rimraf ./src/orval/models/backend-api ./src/orval/backend-api.ts"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.1.1",
+    "@mui/lab": "^7.0.0-beta.13",
+    "@mui/material": "^7.1.1",
     "axios": "^1.9.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "swr": "^2.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

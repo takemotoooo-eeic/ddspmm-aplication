@@ -13,7 +13,7 @@ ddsp_router = APIRouter()
 
 
 @ddsp_router.post("/ddsp/train", response_model=models.Features)
-async def ddsp_train_api(
+async def train_ddsp(
     wav_file: UploadFile = File(..., description="WAVファイル"),
     midi_file: UploadFile = File(..., description="MIDIファイル"),
 ):
@@ -56,7 +56,7 @@ async def ddsp_train_api(
     responses={200: WAV_RESPONSE},
     response_class=WAVResponse,
 )
-def ddsp_generate_api(params: models.DDSPGenerateParams):
+def generate_audio_from_ddsp(params: models.DDSPGenerateParams):
     ddsp_model = DDSPModel()
     wav_data: bytes = ddsp_model.generate(
         pitch=params.pitch,

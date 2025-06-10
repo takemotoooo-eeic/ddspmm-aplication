@@ -1,6 +1,6 @@
 components:
   schemas:
-    Body_ddsp_train_api_ddsp_train_post:
+    Body_train_ddsp_ddsp_train_post:
       properties:
         midi_file:
           description: MIDIファイル
@@ -15,7 +15,7 @@ components:
       required:
       - wav_file
       - midi_file
-      title: Body_ddsp_train_api_ddsp_train_post
+      title: Body_train_ddsp_ddsp_train_post
       type: object
     DDSPGenerateParams:
       properties:
@@ -115,7 +115,7 @@ openapi: 3.1.0
 paths:
   /ddsp/generate:
     post:
-      operationId: DdspGenerateApi
+      operationId: GenerateAudioFromDdsp
       requestBody:
         content:
           application/json:
@@ -136,15 +136,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
-      summary: Ddsp Generate Api
+      summary: Generate Audio From Ddsp
   /ddsp/train:
     post:
-      operationId: DdspTrainApi
+      operationId: TrainDdsp
       requestBody:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Body_ddsp_train_api_ddsp_train_post'
+              $ref: '#/components/schemas/Body_train_ddsp_ddsp_train_post'
         required: true
       responses:
         '200':
@@ -159,4 +159,4 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
-      summary: Ddsp Train Api
+      summary: Train Ddsp

@@ -3,12 +3,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class CustomBaseModel(BaseModel):
-    model_config = ConfigDict(
-        protected_namespaces=(
-            "model_family_",
-            "model_families_",
-        )
-    )
+    model_config = ConfigDict()
 
 
 WAV_RESPONSE = {

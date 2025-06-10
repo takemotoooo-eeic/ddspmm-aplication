@@ -1,9 +1,23 @@
 services:
+  nginx:
+    container_name: ddspmm-application-nginx
+    build:
+      context: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - web
+      - api
+
   api:
     build:
       context: ./backend
       dockerfile: ./Dockerfile
     working_dir: /app
+    container_name: ddspmm-application-api
     ports:
       - "8888:8888"
     volumes:
@@ -20,3 +34,19 @@ services:
         reservations:
           devices:
             - capabilities: [gpu]
+
+  web:
+    container_name: ddspmm-application-web
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      target: ${TARGET:-dev}
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - ./backend/api/controllers/backend_api/openapi/openapi.yml:/opt/backend_api_openapi.yml
+    env_file:
+      - ./frontend/.env
+
