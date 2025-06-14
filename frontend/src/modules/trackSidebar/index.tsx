@@ -23,7 +23,8 @@ export const TrackSidebar = ({
       sx={{
         width: 240,
         bgcolor: 'background.paper',
-        p: 2,
+        pt: 2,
+        pb: 2,
         overflowY: 'auto',
         position: 'fixed',
         left: 0,
@@ -33,7 +34,7 @@ export const TrackSidebar = ({
         borderRight: '1px solid #333',
       }}
     >
-      {tracks.map(track => (
+      {tracks.map((track, idx) => (
         <Box
           key={track.id}
           sx={{
@@ -43,25 +44,28 @@ export const TrackSidebar = ({
             mb: 1,
             display: 'flex',
             alignItems: 'center',
-            px: 2,
             cursor: 'pointer',
-            '&:hover': { bgcolor: '#444' }
+            '&:hover': { bgcolor: '#444' },
+            borderBottom: '1px solid #333',
+            px: 0,
           }}
           onClick={() => onTrackClick(track.id)}
         >
-          <Typography sx={{ color: '#fff', minWidth: 80 }}>{track.name}</Typography>
-          <Box sx={{ display: 'flex', gap: 1, ml: 'auto', alignItems: 'center' }}>
-            <VolumeSlider
-              value={track.volume * 128}
-              onChange={(volume) => onVolumeChange(track.id, volume / 128)}
-            />
-            <MuteButton
-              isMuted={track.muted}
-              onClick={(e) => {
-                e.stopPropagation();
-                onMuteToggle(track.id);
-              }}
-            />
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', px: 2 }}>
+            <Typography sx={{ color: '#fff', minWidth: 80 }}>{track.name}</Typography>
+            <Box sx={{ display: 'flex', gap: 1, ml: 'auto', alignItems: 'center' }}>
+              <VolumeSlider
+                value={track.volume * 128}
+                onChange={(volume) => onVolumeChange(track.id, volume / 128)}
+              />
+              <MuteButton
+                isMuted={track.muted}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMuteToggle(track.id);
+                }}
+              />
+            </Box>
           </Box>
         </Box>
       ))}

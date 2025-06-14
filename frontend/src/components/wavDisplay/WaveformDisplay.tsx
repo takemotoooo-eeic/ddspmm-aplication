@@ -5,9 +5,19 @@ interface WaveformDisplayProps {
   wavData: Blob | null;
   height?: number;
   width?: number;
+  trackColor?: string;
+  showTrackDivider?: boolean;
+  isLastTrack?: boolean;
 }
 
-export const WaveformDisplay = ({ wavData, height = 60, width = 200 }: WaveformDisplayProps) => {
+export const WaveformDisplay = ({
+  wavData,
+  height = 60,
+  width = 200,
+  trackColor = '#646cff',
+  showTrackDivider = true,
+  isLastTrack = false,
+}: WaveformDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -27,9 +37,31 @@ export const WaveformDisplay = ({ wavData, height = 60, width = 200 }: WaveformD
       const step = Math.ceil(channelData.length / width);
       const amp = height / 2;
 
+      // 背景をクリア
       ctx.clearRect(0, 0, width, height);
+
+      // トラック区切り線を描画
+      if (showTrackDivider) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        // 角丸の枠を描画（borderRadius: 8px相当）
+        const radius = 8;
+        ctx.moveTo(0.5 + radius, 0.5);
+        ctx.lineTo(width - 0.5 - radius, 0.5);
+        ctx.arcTo(width - 0.5, 0.5, width - 0.5, 0.5 + radius, radius);
+        ctx.lineTo(width - 0.5, height - 0.5 - radius);
+        ctx.arcTo(width - 0.5, height - 0.5, width - 0.5 - radius, height - 0.5, radius);
+        ctx.lineTo(0.5 + radius, height - 0.5);
+        ctx.arcTo(0.5, height - 0.5, 0.5, height - 0.5 - radius, radius);
+        ctx.lineTo(0.5, 0.5 + radius);
+        ctx.arcTo(0.5, 0.5, 0.5 + radius, 0.5, radius);
+        ctx.stroke();
+      }
+
+      // 波形を描画
       ctx.beginPath();
-      ctx.strokeStyle = '#646cff';
+      ctx.strokeStyle = '#000000'; // 波形を黒色に
       ctx.lineWidth = 2;
 
       for (let i = 0; i < width; i++) {
@@ -43,15 +75,30 @@ export const WaveformDisplay = ({ wavData, height = 60, width = 200 }: WaveformD
         ctx.moveTo(i, (1 + min) * amp);
         ctx.lineTo(i, (1 + max) * amp);
       }
-
       ctx.stroke();
+
+      // 音データの色付きブロックを描画
+      ctx.fillStyle = trackColor;
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1.0;
+
     };
 
     drawWaveform();
-  }, [wavData, height, width]);
+  }, [wavData, height, width, trackColor, showTrackDivider]);
 
   return (
-    <Box sx={{ width, height, bgcolor: '#1e1e1e', borderRadius: 1 }}>
+    <Box
+      sx={{
+        width,
+        height,
+        bgcolor: '#1e1e1e',
+        borderRadius: 1,
+        overflow: 'hidden',
+        borderBottom: !isLastTrack ? '1px solid #333' : 'none',
+      }}
+    >
       <canvas
         ref={canvasRef}
         width={width}

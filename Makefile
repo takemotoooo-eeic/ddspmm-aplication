@@ -1,10 +1,8 @@
 init:
 	docker compose up --build -d
-	cd frontend && npm install
 
 up:
 	docker compose up -d
-	cd frontend && npm install && npm run dev
 
 stop:
 	docker compose stop

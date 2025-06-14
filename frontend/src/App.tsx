@@ -160,26 +160,20 @@ export default function App() {
             }}
           >
             {/* 各トラックの波形を縦に並べて表示 */}
-            {tracks.map(track => (
+            {tracks.map((track, idx) => (
               <Box key={track.id} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Box sx={{ width: 2000, height: 60, bgcolor: '#222', borderRadius: 1, overflow: 'hidden' }}>
-                  <WaveformDisplay wavData={track.wavData} width={2000} />
+                  <WaveformDisplay
+                    wavData={track.wavData}
+                    width={2000}
+                    isLastTrack={idx === tracks.length - 1}
+                  />
                 </Box>
               </Box>
             ))}
           </Box>
 
           {/* 下部：コントロールパネル */}
-          <Box
-            sx={{
-              height: 200,
-              bgcolor: 'background.paper',
-              p: 2,
-              borderTop: '1px solid #333'
-            }}
-          >
-            {/* コントロールモジュール */}
-          </Box>
         </Box>
 
         {/* トラックインポートダイアログ */}
