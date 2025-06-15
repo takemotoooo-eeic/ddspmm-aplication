@@ -1,6 +1,6 @@
 import { Box, Typography } from '@mui/material';
 
-const keys = [
+export const keys = [
   { note: 'B', isBlack: false },
   { note: 'A#', isBlack: true },
   { note: 'A', isBlack: false },
@@ -15,11 +15,10 @@ const keys = [
   { note: 'C', isBlack: false },
 ];
 
-const octaves = [6, 5, 4, 3, 2, 1]; // 表示したいオクターブ
+export const octaves = [6, 5, 4, 3, 2, 1]; // 表示したいオクターブ
 
 export const PianoRollKeys = () => (
   <Box sx={{ width: 75, height: '100%', display: 'flex', flexDirection: 'column' }}>
-    <Box sx={{ height: 20, flexShrink: 0, bgcolor: 'transparent', position: 'sticky', top: 0, zIndex: 1 }} />
     <Box sx={{ flex: 1, overflowY: 'auto' }}>
       {octaves.map((oct) =>
         keys.map((key) => (
