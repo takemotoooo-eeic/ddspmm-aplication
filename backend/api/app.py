@@ -18,8 +18,7 @@ APP_URL = os.environ.get("APP_URL")
 
 
 backend_api = FastAPI(
-    name="backend_api",
-    title="DDSPMM Application Backend API",
+    title="backend_api",
     servers=[{"url": "http://localhost:8888/backend-api"}]
 )
 backend_api.add_exception_handler(StarletteHTTPException, http_exception_handler)

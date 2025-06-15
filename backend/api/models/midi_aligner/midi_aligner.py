@@ -56,12 +56,13 @@ class MidiAligner:
         self.trim_top_db: int = 20
         self.logger = get_logger()
 
-    def _convert_midi_to_dataframe(self, midi_file: bytes) -> pd.DataFrame:
+    def _convert_midi_to_dataframe(self, midi_file: bytes) -> tuple[pd.DataFrame, list[str]]:
         midi_buffer = BytesIO(midi_file)
         midi_buffer.seek(0)
         midi_data = pretty_midi.PrettyMIDI(midi_buffer)
         rows = []
         instrument_name_count = {}
+        instrument_names = []
         for instrument in midi_data.instruments:
             base_name = pretty_midi.program_to_instrument_name(instrument.program)
             if base_name in instrument_name_count:
@@ -70,6 +71,7 @@ class MidiAligner:
             else:
                 instrument_name_count[base_name] = 0
                 instrument_name = base_name
+            instrument_names.append(instrument_name)
             for note in instrument.notes:
                 start = round(note.start, 6)
                 duration = round(note.end - note.start, 6)
@@ -80,7 +82,7 @@ class MidiAligner:
         df = pd.DataFrame(
             rows, columns=["start", "duration", "pitch", "velocity", "instrument"]
         )
-        return df
+        return df, instrument_names
 
     def _get_features_from_audio(
         self,
@@ -151,7 +153,7 @@ class MidiAligner:
         f_DLNCO_annotation = shift_chroma_vectors(f_DLNCO_annotation, opt_chroma_shift)
         return f_chroma_quantized_annotation, f_DLNCO_annotation
 
-    def align(self, wav_file: bytes, midi_file: bytes) -> tuple[list[AlignedMidi], int]:
+    def align(self, wav_file: bytes, midi_file: bytes) -> tuple[list[AlignedMidi], int, list[str]]:
         wav_buffer = BytesIO(wav_file)
         wav_buffer.seek(0)
         audio, _ = librosa.load(wav_buffer, sr=self.sr)
@@ -160,7 +162,7 @@ class MidiAligner:
         start_sec = float(start_sample) / float(self.sr)
         self.logger.info(f"start_sec: {start_sec}")
 
-        df_annotation: pd.DataFrame = self._convert_midi_to_dataframe(midi_file)
+        df_annotation, instrument_names = self._convert_midi_to_dataframe(midi_file)
         num_instruments = len(df_annotation["instrument"].unique())
         self.logger.info(f"num_instruments: {num_instruments}")
 
@@ -244,4 +246,4 @@ class MidiAligner:
                 ]
             )
             aligned_midi_list.append(aligned_midi)
-        return aligned_midi_list, num_instruments
+        return aligned_midi_list, num_instruments, instrument_names
