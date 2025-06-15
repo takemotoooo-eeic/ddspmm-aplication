@@ -42,12 +42,14 @@ export default function App() {
   const [midFile, setMidFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
+  const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const playbackStartTimeRef = useRef<number>(0);
 
   const handleTrackClick = (trackId: string) => {
     setSelectedTrack(trackId);
@@ -90,12 +92,17 @@ export default function App() {
 
   // 現在時間の更新
   const updateCurrentTime = () => {
-    if (!isPlaying || !audioContextRef.current) return;
+    if (!isPlayingRef.current || !audioContextRef.current) {
+      return;
+    }
 
-    const newTime = audioContextRef.current.currentTime - startTimeRef.current;
+    const newTime = audioContextRef.current.currentTime - playbackStartTimeRef.current;
+
     if (newTime >= 0) {
       setCurrentTime(newTime);
     }
+
+    // 次のフレームで再度更新をスケジュール
     animationFrameRef.current = requestAnimationFrame(updateCurrentTime);
   };
 
@@ -105,44 +112,61 @@ export default function App() {
       audioContextRef.current = new AudioContext();
     }
 
-    if (!isPlaying) {
+    if (!isPlayingRef.current) {
       const startTime = audioContextRef.current.currentTime;
       startTimeRef.current = startTime;
+      playbackStartTimeRef.current = startTime;
+      sourcesRef.current = [];
 
-      // 各トラックのオーディオバッファを準備
-      for (const track of tracks) {
-        if (track.muted) continue;
+      try {
+        // 各トラックのオーディオバッファを準備
+        for (const track of tracks) {
+          if (track.muted) continue;
 
-        if (!audioBuffersRef.current.has(track.id)) {
-          const arrayBuffer = await track.wavData.arrayBuffer();
-          const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
-          audioBuffersRef.current.set(track.id, audioBuffer);
+          if (!audioBuffersRef.current.has(track.id)) {
+            const arrayBuffer = await track.wavData.arrayBuffer();
+            const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+            audioBuffersRef.current.set(track.id, audioBuffer);
+          }
+
+          const source = audioContextRef.current.createBufferSource();
+          const gainNode = audioContextRef.current.createGain();
+
+          source.buffer = audioBuffersRef.current.get(track.id)!;
+          gainNode.gain.value = track.volume;
+
+          source.connect(gainNode);
+          gainNode.connect(audioContextRef.current.destination);
+
+          source.start(0);
+          sourcesRef.current.push(source);
         }
 
-        const source = audioContextRef.current.createBufferSource();
-        const gainNode = audioContextRef.current.createGain();
-
-        source.buffer = audioBuffersRef.current.get(track.id)!;
-        gainNode.gain.value = track.volume;
-
-        source.connect(gainNode);
-        gainNode.connect(audioContextRef.current.destination);
-
-        source.start(0);
+        isPlayingRef.current = true;
+        updateCurrentTime();
+      } catch (error) {
+        console.error('Error during playback:', error);
+        isPlayingRef.current = false;
       }
-
-      setIsPlaying(true);
-      updateCurrentTime();
     }
   };
 
   // 停止処理
   const handleStop = () => {
-    setIsPlaying(false);
+    isPlayingRef.current = false;
     setCurrentTime(0);
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
+    // すべてのソースを停止
+    sourcesRef.current.forEach(source => {
+      try {
+        source.stop();
+      } catch (e) {
+        console.error('Error stopping source:', e);
+      }
+    });
+    sourcesRef.current = [];
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
@@ -225,14 +249,14 @@ export default function App() {
             <IconButton
               onClick={handlePlay}
               color="primary"
-              disabled={tracks.length === 0 || isPlaying}
+              disabled={tracks.length === 0 || isPlayingRef.current}
             >
               <PlayArrowIcon />
             </IconButton>
             <IconButton
               onClick={handleStop}
               color="primary"
-              disabled={!isPlaying}
+              disabled={!isPlayingRef.current}
             >
               <StopIcon />
             </IconButton>
