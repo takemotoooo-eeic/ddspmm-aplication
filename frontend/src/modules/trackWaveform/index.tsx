@@ -20,7 +20,7 @@ export const TrackRowWaveform = ({ track }: TrackRowWaveformProps) => (
   >
     <WaveformDisplay
       wavData={track.wavData}
-      width={2000}
+      width={track.wavData ? Math.floor((track.wavData.size / (16000 * 2)) * 200) : 2000}
       height={70}
     />
   </Box>

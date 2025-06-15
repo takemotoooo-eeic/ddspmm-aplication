@@ -11,12 +11,14 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
+import { Timeline } from './components/Timeline';
 import { useDisclosure } from './hooks/useDisclosure';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
 import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
 import { BodyTrainDdspDdspTrainPost, DDSPGenerateParams } from './orval/models/backend-api';
 import { TrackData } from './types/trackData';
+
 
 // ダークテーマ
 const theme = createTheme({
@@ -121,7 +123,7 @@ export default function App() {
         }}
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Typography variant="h6">DDSPMM Editor</Typography>
+          <Typography variant="h6">DDSP Editor</Typography>
           <AddButton onClick={openImportTracksDialog} />
         </Toolbar>
       </AppBar>
@@ -142,8 +144,12 @@ export default function App() {
           bgcolor: '#1e1e1e',
           display: 'flex',
           flexDirection: 'column',
-          borderRight: '1px solid #333'
+          borderRight: '1px solid #333',
+          mt: '0px', // 余白はBoxで表現
+          pb: 2
         }}>
+          {/* タイムライン分の余白 */}
+          <Box sx={{ height: '30px', bgcolor: '#1e1e1e', borderBottom: '1px solid #333' }} />
           {/* 時間表示バー */}
           {tracks.map((track, idx) => (
             <TrackSidebar
@@ -159,6 +165,13 @@ export default function App() {
         {/* 波形部分（横スクロール） */}
         <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default' }}>
           <Box>
+            {/* タイムラインを追加 */}
+            {tracks.length > 0 && (
+              <Timeline
+                duration={tracks[0].wavData.size / (16000 * 2)} // 16kHz, 16bit (2 bytes)
+                width={tracks[0].wavData ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000} // 1秒あたり200px
+              />
+            )}
             {tracks.map((track, idx) => (
               <TrackRowWaveform
                 key={track.id}
