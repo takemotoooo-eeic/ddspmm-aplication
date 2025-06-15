@@ -1,3 +1,5 @@
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
 import {
   AppBar,
   Box,
@@ -5,11 +7,12 @@ import {
   createTheme,
   CssBaseline,
   Dialog,
+  IconButton,
   ThemeProvider,
   Toolbar,
   Typography
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
 import { RefreshButton } from './components/buttons/refreshButton';
 import { useDisclosure } from './hooks/useDisclosure';
@@ -39,6 +42,12 @@ export default function App() {
   const [midFile, setMidFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const startTimeRef = useRef<number>(0);
+  const animationFrameRef = useRef<number>(0);
 
   const handleTrackClick = (trackId: string) => {
     setSelectedTrack(trackId);
@@ -71,6 +80,87 @@ export default function App() {
     open: openImportTracksDialog,
     close: closeImportTracksDialog,
   } = useDisclosure({});
+
+  // 時間をフォーマットする関数
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // 現在時間の更新
+  const updateCurrentTime = () => {
+    if (!isPlaying || !audioContextRef.current) return;
+
+    const newTime = audioContextRef.current.currentTime - startTimeRef.current;
+    if (newTime >= 0) {
+      setCurrentTime(newTime);
+    }
+    animationFrameRef.current = requestAnimationFrame(updateCurrentTime);
+  };
+
+  // 再生処理
+  const handlePlay = async () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+
+    if (!isPlaying) {
+      const startTime = audioContextRef.current.currentTime;
+      startTimeRef.current = startTime;
+
+      // 各トラックのオーディオバッファを準備
+      for (const track of tracks) {
+        if (track.muted) continue;
+
+        if (!audioBuffersRef.current.has(track.id)) {
+          const arrayBuffer = await track.wavData.arrayBuffer();
+          const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+          audioBuffersRef.current.set(track.id, audioBuffer);
+        }
+
+        const source = audioContextRef.current.createBufferSource();
+        const gainNode = audioContextRef.current.createGain();
+
+        source.buffer = audioBuffersRef.current.get(track.id)!;
+        gainNode.gain.value = track.volume;
+
+        source.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
+
+        source.start(0);
+      }
+
+      setIsPlaying(true);
+      updateCurrentTime();
+    }
+  };
+
+  // 停止処理
+  const handleStop = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    audioBuffersRef.current.clear();
+  };
+
+  // コンポーネントのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   const handleImportTracks = async () => {
     if (!wavFile || !midFile) return;
@@ -126,8 +216,29 @@ export default function App() {
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Typography variant="h6">DDSP Editor</Typography>
+
+          {/* 再生コントロール */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body1" sx={{ minWidth: '60px' }}>
+              {formatTime(currentTime)}
+            </Typography>
+            <IconButton
+              onClick={handlePlay}
+              color="primary"
+              disabled={tracks.length === 0 || isPlaying}
+            >
+              <PlayArrowIcon />
+            </IconButton>
+            <IconButton
+              onClick={handleStop}
+              color="primary"
+              disabled={!isPlaying}
+            >
+              <StopIcon />
+            </IconButton>
+          </Box>
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* リロードボタン */}
             <RefreshButton onClick={() => setTracks([])} />
             <AddButton disabled={tracks.length !== 0} onClick={openImportTracksDialog} />
           </Box>
