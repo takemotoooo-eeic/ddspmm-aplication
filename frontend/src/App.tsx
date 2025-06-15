@@ -321,14 +321,6 @@ export default function App() {
               onVolumeChange={(volume) => handleVolumeChange(track.id, volume)}
             />
           ))}
-          {/* 空いている部分をクリック可能にする */}
-          <Box
-            sx={{
-              flexGrow: 1,
-              cursor: 'pointer',
-            }}
-            onClick={() => setSelectedTrack(null)}
-          />
         </Box>
         {/* 波形部分（横スクロール） */}
         <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default', position: 'relative' }}>
@@ -365,7 +357,7 @@ export default function App() {
                 height: 'calc(100vh - 64px - 30px - ' + (tracks.length * 100) + 'px)',
                 cursor: 'pointer',
               }}
-              onClick={() => setSelectedTrack(null)}
+              onClick={handleTimelineClick}
             />
           </Box>
         </Box>
