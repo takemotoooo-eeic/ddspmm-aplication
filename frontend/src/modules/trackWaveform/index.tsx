@@ -4,13 +4,15 @@ import { WaveformDisplay } from './waveDisplay';
 
 interface TrackRowWaveformProps {
   track: TrackData;
+  setSelectedTrack: (track: TrackData) => void;
+  selected: boolean;
 }
 
-export const TrackRowWaveform = ({ track }: TrackRowWaveformProps) => (
+export const TrackRowWaveform = ({ track, setSelectedTrack, selected }: TrackRowWaveformProps) => (
   <Box
     sx={{
       height: 80,
-      bgcolor: '#222',
+      bgcolor: selected ? '#333' : '#222',
       borderRadius: 1,
       overflow: 'hidden',
       borderBottom: '1px solid #333',
@@ -22,6 +24,8 @@ export const TrackRowWaveform = ({ track }: TrackRowWaveformProps) => (
       wavData={track.wavData}
       width={track.wavData ? Math.floor((track.wavData.size / (16000 * 2)) * 200) : 2000}
       height={70}
+      track={track}
+      setSelectedTrack={setSelectedTrack}
     />
   </Box>
 ); 

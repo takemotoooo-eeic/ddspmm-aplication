@@ -1,3 +1,4 @@
+import { TrackData } from '@/types/trackData';
 import { Box } from '@mui/material';
 import { useEffect, useRef } from 'react';
 
@@ -7,6 +8,8 @@ interface WaveformDisplayProps {
   width?: number;
   trackColor?: string;
   showTrackDivider?: boolean;
+  track: TrackData;
+  setSelectedTrack: (track: TrackData) => void;
 }
 
 export const WaveformDisplay = ({
@@ -15,6 +18,8 @@ export const WaveformDisplay = ({
   width = 200,
   trackColor = '#646cff',
   showTrackDivider = true,
+  track,
+  setSelectedTrack,
 }: WaveformDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -96,6 +101,7 @@ export const WaveformDisplay = ({
         overflow: 'hidden',
         borderBottom: '1px solid #333',
       }}
+      onClick={() => setSelectedTrack(track)}
     >
       <canvas
         ref={canvasRef}
