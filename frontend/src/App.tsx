@@ -41,6 +41,7 @@ export default function App() {
   const [midFile, setMidFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -120,7 +121,6 @@ export default function App() {
     }
 
     if (!isPlayingRef.current) {
-      console.log('Playing...');
       const startTime = audioContextRef.current.currentTime;
       startTimeRef.current = startTime;
       // 現在のカーソル位置を再生開始位置として設定
@@ -153,11 +153,12 @@ export default function App() {
         }
 
         isPlayingRef.current = true;
-        console.log('Starting time update...');
+        setIsPlaying(true);
         updateCurrentTime();
       } catch (error) {
         console.error('Error during playback:', error);
         isPlayingRef.current = false;
+        setIsPlaying(false);
       }
     }
   };
@@ -165,6 +166,7 @@ export default function App() {
   // 停止処理
   const handleStop = () => {
     isPlayingRef.current = false;
+    setIsPlaying(false);
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -177,10 +179,6 @@ export default function App() {
       }
     });
     sourcesRef.current = [];
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
     audioBuffersRef.current.clear();
   };
 
@@ -275,11 +273,11 @@ export default function App() {
             </Typography>
             <StartButton
               onClick={handlePlay}
-              disabled={tracks.length === 0 || isPlayingRef.current}
+              disabled={tracks.length === 0 || isPlaying}
             />
             <StopButton
               onClick={handleStop}
-              disabled={!isPlayingRef.current}
+              disabled={!isPlaying}
             />
           </Box>
 
