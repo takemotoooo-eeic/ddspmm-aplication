@@ -14,6 +14,18 @@ interface EditDialogProps {
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
+// Hzからノート番号への変換関数
+const hzToNoteNumber = (hz: number): number => {
+  return 12 * Math.log2(hz / 440) + 69;
+};
+
+// ノート番号からY座標への変換関数
+const noteNumberToY = (noteNumber: number): number => {
+  const totalKeys = octaves.length * keys.length;
+  const noteHeight = 30; // 各ノートの高さ
+  return totalKeys * noteHeight - (noteNumber - 21) * noteHeight + 15;
+};
+
 export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
@@ -45,6 +57,48 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   const handleRegenerate = () => {
     // TODO: 波形再生成のロジックを実装
     console.log('波形を再生成します');
+  };
+
+  // ピッチデータを描画する関数
+  const renderPitchLine = () => {
+
+    if (!selectedTrack || !selectedTrack.features.pitch) return null;
+
+    const points: { x: number; y: number }[] = [];
+    const timeScale = 200; // 時間軸のスケール（ピクセル/秒）
+    const sampleRate = 31.25; // サンプリングレート
+    const totalDuration = selectedTrack.features.pitch.length / sampleRate;
+
+    selectedTrack.features.pitch.forEach((hz, index) => {
+      if (hz > 0) { // 有効なピッチ値のみを描画
+        const noteNumber = hzToNoteNumber(hz);
+        const x = (index / sampleRate) * timeScale;
+        const y = noteNumberToY(noteNumber);
+        points.push({ x, y });
+      }
+    });
+
+    // 線を描画
+    return (
+      <svg
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      >
+        <polyline
+          points={points.map(p => `${p.x},${p.y}`).join(' ')}
+          fill="none"
+          stroke="#646cff"
+          strokeWidth="2"
+        />
+      </svg>
+    );
   };
 
   return (
@@ -264,6 +318,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
                     ))
                   )}
                 </Box>
+                {renderPitchLine()}
               </Box>
             </Box>
           </Box>
