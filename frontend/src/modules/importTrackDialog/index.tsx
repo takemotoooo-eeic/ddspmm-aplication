@@ -1,5 +1,5 @@
-import { Box, Button, Dialog, Typography } from '@mui/material';
-import React from 'react';
+import { Box, Button, CircularProgress, Dialog, Typography } from '@mui/material';
+import React, { useState } from 'react';
 
 interface ImportTrackDialogProps {
   open: boolean;
@@ -20,6 +20,19 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
   setMidFile,
   onImport
 }) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleImport = async () => {
+    setIsLoading(true);
+    try {
+      await onImport();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const isImportEnabled = wavFile && midFile && !isLoading;
+
   return (
     <Dialog open={open} onClose={onClose}>
       <Box sx={{ bgcolor: 'background.paper', p: 3, minWidth: 400 }}>
@@ -64,14 +77,19 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
           </Typography>
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
           <Button
             variant="contained"
             color="primary"
             sx={{ ml: 2 }}
-            onClick={onImport}
+            onClick={handleImport}
+            disabled={!isImportEnabled}
           >
-            Import
+            {isLoading ? (
+              <CircularProgress size={16} color="inherit" />
+            ) : (
+              'Import'
+            )}
           </Button>
         </Box>
       </Box>

@@ -101,7 +101,9 @@ export const WaveformDisplay = ({
         overflow: 'hidden',
         borderBottom: '1px solid #333',
       }}
-      onClick={() => setSelectedTrack(track)}
+      onClick={() => {
+        setSelectedTrack(track);
+      }}
     >
       <canvas
         ref={canvasRef}

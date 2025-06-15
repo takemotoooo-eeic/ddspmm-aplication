@@ -13,6 +13,7 @@ import { RefreshButton } from './components/buttons/refreshButton';
 import { StartButton } from './components/buttons/StartButton';
 import { StopButton } from './components/buttons/StopButton';
 import { useDisclosure } from './hooks/useDisclosure';
+import { EditDialog } from './modules/editDialog';
 import { ImportTrackDialog } from './modules/importTrackDialog';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
@@ -301,12 +302,12 @@ export default function App() {
           top: 64, // AppBarの高さ
           left: 0,
           height: 'calc(100vh - 64px)',
-          zIndex: 20,
+          zIndex: 5,
           bgcolor: '#1e1e1e',
           display: 'flex',
           flexDirection: 'column',
           borderRight: '1px solid #333',
-          mt: '0px', // 余白はBoxで表現
+          mt: '0px',
           pb: 2
         }}>
           {/* タイムライン分の余白 */}
@@ -322,6 +323,14 @@ export default function App() {
               onVolumeChange={(volume) => handleVolumeChange(track.id, volume)}
             />
           ))}
+          {/* 空いている部分をクリック可能にする */}
+          <Box
+            sx={{
+              flexGrow: 1,
+              cursor: 'pointer',
+            }}
+            onClick={() => setSelectedTrack(null)}
+          />
         </Box>
         {/* 波形部分（横スクロール） */}
         <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default', position: 'relative' }}>
@@ -352,6 +361,14 @@ export default function App() {
                 setSelectedTrack={setSelectedTrack}
               />
             ))}
+            {/* 空いている部分をクリック可能にする */}
+            <Box
+              sx={{
+                height: 'calc(100vh - 64px - 30px - ' + (tracks.length * 100) + 'px)',
+                cursor: 'pointer',
+              }}
+              onClick={() => setSelectedTrack(null)}
+            />
           </Box>
         </Box>
       </Box>
@@ -367,6 +384,16 @@ export default function App() {
             midFile={midFile}
             setMidFile={setMidFile}
             onImport={handleImportTracks}
+          />
+        )
+      }
+      {/* ピアノロール(トラック選択時のみ下部に表示) */}
+      {
+        selectedTrack && (
+          <EditDialog
+            selectedTrack={selectedTrack}
+            tracks={tracks}
+            setTracks={setTracks}
           />
         )
       }
