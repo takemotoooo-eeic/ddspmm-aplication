@@ -25,7 +25,7 @@ async def train_ddsp(
         wav_file_bytes = await wav_file.read()
 
         midi_aligner = MidiAligner()
-        aligned_midi_list, num_instruments = midi_aligner.align(
+        aligned_midi_list, num_instruments, instrument_names = midi_aligner.align(
             wav_file_bytes, midi_file_bytes
         )
 
@@ -33,12 +33,14 @@ async def train_ddsp(
         train_input = TrainInput(
             wav_file=wav_file_bytes,
             num_instruments=num_instruments,
+            instrument_names=instrument_names,
             midi=aligned_midi_list,
         )
         result = ddsp_model.train(train_input)
         features = models.Features(
             features=[
                 models.Feature(
+                    instrument_name=result.features[i].instrument_name,
                     pitch=result.features[i].pitch,
                     loudness=result.features[i].loudness,
                     z_feature=result.features[i].z_feature,

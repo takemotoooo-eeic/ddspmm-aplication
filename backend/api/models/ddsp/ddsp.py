@@ -28,10 +28,12 @@ LOUDNESS_PATH = "api/models/ddsp/statistics/loudness.json"
 class TrainInput(BaseModel):
     wav_file: bytes
     num_instruments: int
+    instrument_names: list[str]
     midi: list[AlignedMidi]
 
 
 class Feature(BaseModel):
+    instrument_name: str
     pitch: list[float]
     loudness: list[float]
     z_feature: list[list[float]]
@@ -125,6 +127,7 @@ class DDSPModel:
         num_instruments: int,
         mean_loudness: float,
         std_loudness: float,
+        instrument_names: list[str],
     ) -> TrainOutput:
         optimizer = torch.optim.Adam(
             [z_features, pitches, loudnesses], lr=train_config.lr
@@ -180,6 +183,7 @@ class DDSPModel:
         return TrainOutput(
             features=[
                 Feature(
+                    instrument_name=instrument_names[i],
                     z_feature=z_features[i].reshape(-1,16).detach().cpu().numpy().tolist(),
                     pitch=pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
                     loudness=loudnesses[i].reshape(-1).detach().cpu().numpy().tolist(),
@@ -228,6 +232,7 @@ class DDSPModel:
             num_instruments=train_input.num_instruments,
             mean_loudness=mean_loudness,
             std_loudness=std_loudness,
+            instrument_names=train_input.instrument_names,
         )
 
     def generate(

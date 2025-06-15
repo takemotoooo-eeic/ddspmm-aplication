@@ -216,7 +216,7 @@ export default function App() {
 
         newTracks.push({
           id: `track-${Date.now()}-${Math.random()}`,
-          name: `Track ${tracks.length + newTracks.length + 1}`,
+          name: feature.instrument_name,
           wavData: wavBlob,
           features: feature,
           muted: false,

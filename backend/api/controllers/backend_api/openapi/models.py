@@ -2,6 +2,7 @@ from api.controllers.common import CustomBaseModel
 
 
 class Feature(CustomBaseModel):
+    instrument_name: str
     pitch: list[float]
     loudness: list[float]
     z_feature: list[list[float]]
