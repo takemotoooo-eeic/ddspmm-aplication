@@ -1,9 +1,10 @@
 import CloseIcon from '@mui/icons-material/Close';
-import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useState } from 'react';
 import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
 import { DDSPGenerateParams } from '../../orval/models/backend-api';
 import { TrackData } from '../../types/trackData';
+import { LoudnessEditor } from './loudnessEditor';
 import { PitchEditor } from './pitchEditor';
 
 interface EditDialogProps {
@@ -147,9 +148,15 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
         />
       )}
       {editMode === 'loudness' && (
-        <Box>
-          <Typography>Loudness</Typography>
-        </Box>
+        <LoudnessEditor
+          currentTime={currentTime}
+          selectedTrack={selectedTrack}
+          tracks={tracks}
+          setTracks={setTracks}
+          setSelectedTrack={setSelectedTrack}
+          onTimeLineClick={onTimeLineClick}
+          isEditing={isEditing}
+        />
       )}
     </Box>
   );
