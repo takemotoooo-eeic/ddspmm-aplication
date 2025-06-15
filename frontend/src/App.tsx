@@ -1,5 +1,3 @@
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
 import {
   AppBar,
   Box,
@@ -7,7 +5,6 @@ import {
   createTheme,
   CssBaseline,
   Dialog,
-  IconButton,
   ThemeProvider,
   Toolbar,
   Typography
@@ -15,6 +12,8 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
 import { RefreshButton } from './components/buttons/refreshButton';
+import { StartButton } from './components/buttons/StartButton';
+import { StopButton } from './components/buttons/StopButton';
 import { useDisclosure } from './hooks/useDisclosure';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
@@ -98,6 +97,13 @@ export default function App() {
 
     const newTime = audioContextRef.current.currentTime - playbackStartTimeRef.current;
 
+    // トラックの終端に達したかチェック
+    const trackDuration = tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 0;
+    if (newTime >= trackDuration) {
+      handleStop();
+      return;
+    }
+
     if (newTime >= 0) {
       setCurrentTime(newTime);
     }
@@ -113,9 +119,11 @@ export default function App() {
     }
 
     if (!isPlayingRef.current) {
+      console.log('Playing...');
       const startTime = audioContextRef.current.currentTime;
       startTimeRef.current = startTime;
-      playbackStartTimeRef.current = startTime;
+      // 現在のカーソル位置を再生開始位置として設定
+      playbackStartTimeRef.current = startTime - currentTime;
       sourcesRef.current = [];
 
       try {
@@ -138,11 +146,13 @@ export default function App() {
           source.connect(gainNode);
           gainNode.connect(audioContextRef.current.destination);
 
-          source.start(0);
+          // 現在のカーソル位置から再生を開始
+          source.start(0, currentTime);
           sourcesRef.current.push(source);
         }
 
         isPlayingRef.current = true;
+        console.log('Starting time update...');
         updateCurrentTime();
       } catch (error) {
         console.error('Error during playback:', error);
@@ -154,7 +164,6 @@ export default function App() {
   // 停止処理
   const handleStop = () => {
     isPlayingRef.current = false;
-    setCurrentTime(0);
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -224,6 +233,23 @@ export default function App() {
     setMidFile(null);
     closeImportTracksDialog();
   };
+
+  // タイムラインクリック時の処理
+  const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!tracks.length) return;
+    if (isPlayingRef.current) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const totalWidth = Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200);
+    const newTime = (clickX / totalWidth) * (tracks[0].wavData.size / (16000 * 2));
+
+    setCurrentTime(newTime);
+    playbackStartTimeRef.current = (audioContextRef.current?.currentTime || 0) - newTime;
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -246,20 +272,14 @@ export default function App() {
             <Typography variant="body1" sx={{ minWidth: '60px' }}>
               {formatTime(currentTime)}
             </Typography>
-            <IconButton
+            <StartButton
               onClick={handlePlay}
-              color="primary"
               disabled={tracks.length === 0 || isPlayingRef.current}
-            >
-              <PlayArrowIcon />
-            </IconButton>
-            <IconButton
+            />
+            <StopButton
               onClick={handleStop}
-              color="primary"
               disabled={!isPlayingRef.current}
-            >
-              <StopIcon />
-            </IconButton>
+            />
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -304,8 +324,21 @@ export default function App() {
           ))}
         </Box>
         {/* 波形部分（横スクロール） */}
-        <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default' }}>
-          <Box>
+        <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default', position: 'relative' }}>
+          {/* 再生位置カーソル */}
+          <Box
+            sx={{
+              position: 'absolute',
+              left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+              top: 0,
+              height: '100%',
+              width: 2,
+              bgcolor: 'rgba(255, 255, 255, 0.3)',
+              zIndex: 2,
+              pointerEvents: 'none',
+            }}
+          />
+          <Box onClick={handleTimelineClick} sx={{ cursor: 'pointer' }}>
             {/* タイムラインを追加 */}
             <Timeline
               duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
