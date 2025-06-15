@@ -166,12 +166,10 @@ export default function App() {
         <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default' }}>
           <Box>
             {/* タイムラインを追加 */}
-            {tracks.length > 0 && (
-              <Timeline
-                duration={tracks[0].wavData.size / (16000 * 2)} // 16kHz, 16bit (2 bytes)
-                width={tracks[0].wavData ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000} // 1秒あたり200px
-              />
-            )}
+            <Timeline
+              duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
+              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
+            />
             {tracks.map((track, idx) => (
               <TrackRowWaveform
                 key={track.id}
