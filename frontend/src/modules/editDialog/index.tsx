@@ -46,6 +46,8 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [dragPoints, setDragPoints] = useState<{ x: number; y: number }[]>([]);
+  const [tempPitch, setTempPitch] = useState<number[] | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const pianoRollRef = useRef<HTMLDivElement>(null);
 
@@ -93,19 +95,23 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
     if (!isEditing || !selectedTrack) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left + scrollPosition; // スクロール位置を加算
+    const x = event.clientX - rect.left + scrollPosition;
     const y = event.clientY - rect.top;
 
     setIsDragging(true);
     setDragStartPoint({ x, y });
+    setDragPoints([{ x, y }]);
+    setTempPitch([...selectedTrack.features.pitch]);
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !dragStartPoint || !selectedTrack || !isEditing) return;
+    if (!isDragging || !dragStartPoint || !selectedTrack || !isEditing || !tempPitch) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left + scrollPosition; // スクロール位置を加算
+    const x = event.clientX - rect.left + scrollPosition;
     const y = event.clientY - rect.top;
+
+    setDragPoints(prev => [...prev, { x, y }]);
 
     const timeScale = 200;
     const sampleRate = 31.25;
@@ -114,43 +120,46 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
     const newHz = noteNumberToHz(noteNumber);
 
     if (timeIndex >= 0 && timeIndex < selectedTrack.features.pitch.length) {
-      const newPitch = [...selectedTrack.features.pitch];
+      const newPitch = [...tempPitch];
       newPitch[timeIndex] = newHz;
-
-      const updatedTrack = {
-        ...selectedTrack,
-        features: {
-          ...selectedTrack.features,
-          pitch: newPitch
-        }
-      };
-
-      const updatedTracks = tracks.map(track =>
-        track.id === selectedTrack.id ? updatedTrack : track
-      );
-
-      setTracks(updatedTracks);
-      setSelectedTrack(updatedTrack);
+      setTempPitch(newPitch);
     }
   };
 
   const handleMouseUp = () => {
+    if (!isDragging || !selectedTrack || !isEditing || !tempPitch) return;
+
+    const updatedTrack = {
+      ...selectedTrack,
+      features: {
+        ...selectedTrack.features,
+        pitch: tempPitch
+      }
+    };
+
+    const updatedTracks = tracks.map(track =>
+      track.id === selectedTrack.id ? updatedTrack : track
+    );
+
+    setTracks(updatedTracks);
+    setSelectedTrack(updatedTrack);
     setIsDragging(false);
     setDragStartPoint(null);
+    setDragPoints([]);
+    setTempPitch(null);
   };
 
   // ピッチデータを描画する関数
   const renderPitchLine = () => {
-
-    if (!selectedTrack || !selectedTrack.features.pitch) return null;
+    if (!selectedTrack) return null;
 
     const points: { x: number; y: number }[] = [];
-    const timeScale = 200; // 時間軸のスケール（ピクセル/秒）
-    const sampleRate = 31.25; // サンプリングレート
-    const totalDuration = selectedTrack.features.pitch.length / sampleRate;
+    const timeScale = 200;
+    const sampleRate = 31.25;
+    const pitchData = tempPitch || selectedTrack.features.pitch;
 
-    selectedTrack.features.pitch.forEach((hz, index) => {
-      if (hz > 0) { // 有効なピッチ値のみを描画
+    pitchData.forEach((hz, index) => {
+      if (hz > 0) {
         const noteNumber = hzToNoteNumber(hz);
         const x = (index / sampleRate) * timeScale;
         const y = noteNumberToY(noteNumber);
@@ -158,7 +167,6 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       }
     });
 
-    // 線を描画
     return (
       <svg
         style={{
