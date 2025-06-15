@@ -3,6 +3,7 @@ import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup, Typography } 
 import { useState } from 'react';
 import { TrackData } from '../../types/trackData';
 import { Timeline } from '../timeLine';
+import { PianoRollKeys } from './PianoRollKeys';
 
 interface EditDialogProps {
   selectedTrack: TrackData;
@@ -81,7 +82,7 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack 
                 bgcolor: isEditing ? '#535bf2' : '#444',
               },
               height: '32px',
-              minWidth: '80px',
+              width: '80px',
             }}
           >
             Edit
@@ -110,6 +111,8 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack 
               '&:hover': {
                 bgcolor: '#333',
               },
+              height: '24px',
+              width: '24px',
             }}
           >
             <CloseIcon />
@@ -117,16 +120,10 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack 
         </Box>
       </Box>
       {editMode === 'pitch' && (
-        <Box sx={{ display: 'flex', height: '392px' }}>
+        <Box sx={{ display: 'flex', height: '600px' }}>
           {/* 左端：ピアノロール（鍵盤） */}
-          <Box sx={{ width: '60px', bgcolor: '#222', display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 2 }}>
-            <Box sx={{ height: '30px', bgcolor: '#1e1e1e', borderBottom: '1px solid #333' }} />
-            {/* C3〜C5のラベルを縦に並べる */}
-            {['C5', 'C4', 'C3'].map((note) => (
-              <Box key={note} sx={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', borderBottom: '1px solid #333', width: '100%' }}>
-                {note}
-              </Box>
-            ))}
+          <Box sx={{ width: 80, bgcolor: '#222', borderRight: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <PianoRollKeys />
           </Box>
           {/* 右側：タイムライン＋ピアノロール本体 */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
