@@ -40,7 +40,7 @@ export default function App() {
   const [wavFile, setWavFile] = useState<File | null>(null);
   const [midFile, setMidFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
-  const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
+  const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
   const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -50,8 +50,8 @@ export default function App() {
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const playbackStartTimeRef = useRef<number>(0);
 
-  const handleTrackClick = (trackId: string) => {
-    setSelectedTrack(trackId);
+  const handleTrackClick = (track: TrackData) => {
+    setSelectedTrack(track);
   };
 
   const handleMuteToggle = (trackId: string) => {
@@ -316,8 +316,8 @@ export default function App() {
             <TrackSidebar
               key={track.id}
               track={track}
-              selected={selectedTrack === track.id}
-              onClick={() => handleTrackClick(track.id)}
+              selected={selectedTrack === track}
+              onClick={() => handleTrackClick(track)}
               onMuteToggle={() => handleMuteToggle(track.id)}
               onVolumeChange={(volume) => handleVolumeChange(track.id, volume)}
             />
@@ -348,6 +348,8 @@ export default function App() {
               <TrackRowWaveform
                 key={track.id}
                 track={track}
+                selected={selectedTrack === track}
+                setSelectedTrack={setSelectedTrack}
               />
             ))}
           </Box>
