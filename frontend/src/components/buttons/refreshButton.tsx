@@ -1,4 +1,4 @@
-import AddIcon from "@mui/icons-material/Add";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { IconButton } from "@mui/material";
 
 type Props = {
@@ -6,15 +6,15 @@ type Props = {
   disabled?: boolean;
 }
 
-export const AddButton = ({ onClick, disabled }: Props) => {
+export const RefreshButton = ({ onClick, disabled }: Props) => {
   return (
     <IconButton
-      aria-label="import"
+      aria-label="refresh"
       onClick={onClick}
       style={{ width: 26, height: 26 }}
       disabled={disabled}
     >
-      <AddIcon />
+      <RefreshIcon />
     </IconButton>
   );
 };

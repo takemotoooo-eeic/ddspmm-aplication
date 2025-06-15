@@ -11,8 +11,9 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
-import { Timeline } from './components/Timeline';
+import { RefreshButton } from './components/buttons/refreshButton';
 import { useDisclosure } from './hooks/useDisclosure';
+import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
 import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
@@ -105,7 +106,8 @@ export default function App() {
     } catch (e) {
       console.error('Training error:', e);
     }
-
+    setWavFile(null);
+    setMidFile(null);
     closeImportTracksDialog();
   };
   return (
@@ -124,7 +126,11 @@ export default function App() {
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Typography variant="h6">DDSP Editor</Typography>
-          <AddButton onClick={openImportTracksDialog} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* リロードボタン */}
+            <RefreshButton onClick={() => setTracks([])} />
+            <AddButton disabled={tracks.length !== 0} onClick={openImportTracksDialog} />
+          </Box>
         </Toolbar>
       </AppBar>
 
