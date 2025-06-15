@@ -1,6 +1,8 @@
 import CloseIcon from '@mui/icons-material/Close';
 import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
+import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
+import { DDSPGenerateParams } from '../../orval/models/backend-api';
 import { TrackData } from '../../types/trackData';
 import { Timeline } from '../timeLine';
 import { PianoRollKeys, keys, octaves } from './PianoRollKeys';
@@ -26,12 +28,28 @@ const noteNumberToY = (noteNumber: number): number => {
   return totalKeys * noteHeight - (noteNumber - 21) * noteHeight + 15;
 };
 
+// Y座標からノート番号への変換関数
+const yToNoteNumber = (y: number): number => {
+  const totalKeys = octaves.length * keys.length;
+  const noteHeight = 30;
+  return Math.round(totalKeys - (y - 15) / noteHeight + 21);
+};
+
+// ノート番号からHzへの変換関数
+const noteNumberToHz = (noteNumber: number): number => {
+  return 440 * Math.pow(2, (noteNumber - 69) / 12);
+};
+
 export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const pianoRollRef = useRef<HTMLDivElement>(null);
+
+  const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const newScrollPosition = event.currentTarget.scrollLeft;
@@ -54,9 +72,71 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
     }
   };
 
-  const handleRegenerate = () => {
+  const handleRegenerate = async () => {
     // TODO: 波形再生成のロジックを実装
     console.log('波形を再生成します');
+    const body: DDSPGenerateParams = {
+      z_feature: selectedTrack.features.z_feature,
+      loudness: selectedTrack.features.loudness,
+      pitch: selectedTrack.features.pitch,
+    };
+    const response = await generateAudioTrigger(body);
+    const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
+    const newTracks = tracks.map(track =>
+      track.id === selectedTrack.id ? { ...track, wavData: wavBlob } : track
+    );
+    setTracks(newTracks);
+  };
+
+  // マウスイベントハンドラー
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isEditing || !selectedTrack) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left + scrollPosition; // スクロール位置を加算
+    const y = event.clientY - rect.top;
+
+    setIsDragging(true);
+    setDragStartPoint({ x, y });
+  };
+
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !dragStartPoint || !selectedTrack || !isEditing) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left + scrollPosition; // スクロール位置を加算
+    const y = event.clientY - rect.top;
+
+    const timeScale = 200;
+    const sampleRate = 31.25;
+    const timeIndex = Math.floor((x / timeScale) * sampleRate);
+    const noteNumber = yToNoteNumber(y);
+    const newHz = noteNumberToHz(noteNumber);
+
+    if (timeIndex >= 0 && timeIndex < selectedTrack.features.pitch.length) {
+      const newPitch = [...selectedTrack.features.pitch];
+      newPitch[timeIndex] = newHz;
+
+      const updatedTrack = {
+        ...selectedTrack,
+        features: {
+          ...selectedTrack.features,
+          pitch: newPitch
+        }
+      };
+
+      const updatedTracks = tracks.map(track =>
+        track.id === selectedTrack.id ? updatedTrack : track
+      );
+
+      setTracks(updatedTracks);
+      setSelectedTrack(updatedTrack);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setDragStartPoint(null);
   };
 
   // ピッチデータを描画する関数
@@ -277,15 +357,20 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
                 },
                 msOverflowStyle: 'none',
                 scrollbarWidth: 'none',
+                cursor: isEditing ? 'crosshair' : 'default',
               }}
               onScroll={handleScroll}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
             >
               <Box sx={{
                 width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000,
                 height: '100%',
                 position: 'relative',
               }}
-                onClick={onTimeLineClick}>
+              >
                 {/* 再生位置カーソル（全体） */}
                 <Box
                   sx={{
