@@ -8,14 +8,27 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+import asyncio
 
 from api.controllers.backend_api.router import backend_api_router
 from api.libs.error_handlers import http_exception_handler, request_validation_exception_handler
+
+class TimeoutMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await asyncio.wait_for(call_next(request), timeout=3000.0)
+        except asyncio.TimeoutError:
+            return Response("Request timeout", status_code=504)
 
 app = FastAPI()
 
 APP_URL = os.environ.get("APP_URL")
 
+# タイムアウトミドルウェアを追加
+app.add_middleware(TimeoutMiddleware)
 
 backend_api = FastAPI(
     title="backend_api",

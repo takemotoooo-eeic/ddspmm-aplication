@@ -1,5 +1,6 @@
-import { Box, Button, CircularProgress, Dialog, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Dialog, LinearProgress, Typography } from '@mui/material';
 import React, { useState } from 'react';
+import { LearnData } from '../../types/learnData';
 
 interface ImportTrackDialogProps {
   open: boolean;
@@ -9,6 +10,7 @@ interface ImportTrackDialogProps {
   midFile: File | null;
   setMidFile: (file: File | null) => void;
   onImport: () => void;
+  learnData: LearnData | null;
 }
 
 export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
@@ -18,7 +20,8 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
   setWavFile,
   midFile,
   setMidFile,
-  onImport
+  onImport,
+  learnData
 }) => {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -75,6 +78,18 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
           <Typography variant="body2" sx={{ mb: 2 }}>
             Selected: {midFile.name}
           </Typography>
+        )}
+        {learnData && (
+          <>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Epoch: {learnData.current_epoch}/{learnData.total_epochs}, Loss: {learnData.loss}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={(learnData.current_epoch / learnData.total_epochs) * 100}
+              sx={{ mb: 2 }}
+            />
+          </>
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
           <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
