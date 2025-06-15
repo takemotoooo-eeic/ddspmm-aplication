@@ -1,10 +1,8 @@
 import {
   AppBar,
   Box,
-  Button,
   createTheme,
   CssBaseline,
-  Dialog,
   ThemeProvider,
   Toolbar,
   Typography
@@ -15,6 +13,7 @@ import { RefreshButton } from './components/buttons/refreshButton';
 import { StartButton } from './components/buttons/StartButton';
 import { StopButton } from './components/buttons/StopButton';
 import { useDisclosure } from './hooks/useDisclosure';
+import { ImportTrackDialog } from './modules/importTrackDialog';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
@@ -76,6 +75,7 @@ export default function App() {
 
   const { trigger: trainTrigger } = useTrainDdsp();
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
+
   const {
     isOpen: isOpenImportTracksDialog,
     open: openImportTracksDialog,
@@ -359,61 +359,15 @@ export default function App() {
       {/* トラックインポートダイアログ */}
       {
         isOpenImportTracksDialog && (
-          <Dialog open={isOpenImportTracksDialog} onClose={closeImportTracksDialog}>
-            <Box sx={{ bgcolor: 'background.paper', p: 3, minWidth: 400 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                IMPORT TRACKS
-              </Typography>
-              {/* WAV ファイル選択 */}
-              <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-                Select WAV File
-                <input
-                  type="file"
-                  accept="audio/wav"
-                  hidden
-                  onChange={e => {
-                    const file = e.target.files?.[0] || null;
-                    setWavFile(file);
-                  }}
-                />
-              </Button>
-              {wavFile && (
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  Selected: {wavFile.name}
-                </Typography>
-              )}
-
-              {/* MIDI ファイル選択 */}
-              <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-                Select MIDI File
-                <input
-                  type="file"
-                  accept="audio/midi, .mid"
-                  hidden
-                  onChange={e => {
-                    const file = e.target.files?.[0] || null;
-                    setMidFile(file);
-                  }}
-                />
-              </Button>
-              {midFile && (
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  Selected: {midFile.name}
-                </Typography>
-              )}
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                <Button onClick={closeImportTracksDialog}>Cancel</Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  sx={{ ml: 2 }}
-                  onClick={handleImportTracks}
-                >
-                  Import
-                </Button>
-              </Box>
-            </Box>
-          </Dialog>
+          <ImportTrackDialog
+            open={isOpenImportTracksDialog}
+            onClose={closeImportTracksDialog}
+            wavFile={wavFile}
+            setWavFile={setWavFile}
+            midFile={midFile}
+            setMidFile={setMidFile}
+            onImport={handleImportTracks}
+          />
         )
       }
     </ThemeProvider>
