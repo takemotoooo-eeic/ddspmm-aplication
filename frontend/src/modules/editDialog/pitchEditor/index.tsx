@@ -16,7 +16,7 @@ interface PitchEditorProps {
 
 // Hzからノート番号への変換関数
 const hzToNoteNumber = (hz: number): number => {
-  return 12 * Math.log2(hz / 440) + 69;
+  return 12 * Math.log2(hz / 440) + 67;
 };
 
 // ノート番号からY座標への変換関数
@@ -35,7 +35,7 @@ const yToNoteNumber = (y: number): number => {
 
 // ノート番号からHzへの変換関数
 const noteNumberToHz = (noteNumber: number): number => {
-  return 440 * Math.pow(2, (noteNumber - 69) / 12);
+  return 440 * Math.pow(2, (noteNumber - 67) / 12);
 };
 
 export const PitchEditor = ({
@@ -135,7 +135,7 @@ export const PitchEditor = ({
     const sampleRate = 31.25;
     const pitchData = tempPitch || selectedTrack.features.pitch;
 
-    pitchData.forEach((hz, index) => {
+    pitchData.forEach((hz: number, index: number) => {
       if (hz > 0) {
         const noteNumber = hzToNoteNumber(hz);
         const x = (index / sampleRate) * timeScale;
