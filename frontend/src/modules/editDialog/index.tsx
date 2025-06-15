@@ -1,14 +1,17 @@
-import { Box, Button, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useState } from 'react';
 import { TrackData } from '../../types/trackData';
+import { Timeline } from '../timeLine';
 
 interface EditDialogProps {
   selectedTrack: TrackData;
   tracks: TrackData[];
   setTracks: (tracks: TrackData[]) => void;
+  setSelectedTrack: (track: TrackData | null) => void;
 }
 
-export const EditDialog = ({ selectedTrack, tracks, setTracks }: EditDialogProps) => {
+export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -97,9 +100,54 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks }: EditDialogProps
           >
             REGENERATE
           </Button>
+          <IconButton
+            onClick={() => {
+              setIsEditing(false);
+              setSelectedTrack(null);
+            }}
+            sx={{
+              color: '#fff',
+              '&:hover': {
+                bgcolor: '#333',
+              },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         </Box>
       </Box>
-      {/* ここにピアノロール本体が入る予定 */}
+      {editMode === 'pitch' && (
+        <Box sx={{ display: 'flex', height: '392px' }}>
+          {/* 左端：ピアノロール（鍵盤） */}
+          <Box sx={{ width: '60px', bgcolor: '#222', display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 2 }}>
+            <Box sx={{ height: '30px', bgcolor: '#1e1e1e', borderBottom: '1px solid #333' }} />
+            {/* C3〜C5のラベルを縦に並べる */}
+            {['C5', 'C4', 'C3'].map((note) => (
+              <Box key={note} sx={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', borderBottom: '1px solid #333', width: '100%' }}>
+                {note}
+              </Box>
+            ))}
+          </Box>
+          {/* 右側：タイムライン＋ピアノロール本体 */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            {/* タイムライン */}
+            <Timeline
+              duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
+              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
+              height={20}
+            />
+            {/* ピアノロール本体 */}
+            <Box sx={{ flex: 1, bgcolor: '#181818' }}>
+              {/* ここにノートや波形を描画予定 */}
+            </Box>
+          </Box>
+        </Box>
+      )}
+      {editMode === 'loudness' && (
+        <Box>
+          <Typography>Loudness</Typography>
+        </Box>
+      )}
     </Box>
   );
 };

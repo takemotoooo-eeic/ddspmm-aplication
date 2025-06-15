@@ -3,16 +3,17 @@ import { Box, Typography } from '@mui/material';
 interface TimelineProps {
   duration: number; // 秒単位
   width: number;    // ピクセル単位
+  height?: number;
 }
 
-export const Timeline = ({ duration, width }: TimelineProps) => {
+export const Timeline = ({ duration, width, height = 30 }: TimelineProps) => {
   const interval = 1; // 1秒ごと
   const totalMarkers = Math.ceil(duration / interval);
 
   return (
     <Box
       sx={{
-        height: 30,
+        height: height,
         bgcolor: '#222',
         borderBottom: '1px solid #333',
         position: 'relative',
@@ -44,7 +45,7 @@ export const Timeline = ({ duration, width }: TimelineProps) => {
                 color: '#888',
                 fontSize: '0.7rem',
                 position: 'absolute',
-                top: 12,
+                top: (height - 10) / 2,
                 left: 2,
                 whiteSpace: 'nowrap',
               }}

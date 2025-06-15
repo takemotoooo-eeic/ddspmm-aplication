@@ -394,6 +394,7 @@ export default function App() {
             selectedTrack={selectedTrack}
             tracks={tracks}
             setTracks={setTracks}
+            setSelectedTrack={setSelectedTrack}
           />
         )
       }
