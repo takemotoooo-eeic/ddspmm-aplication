@@ -1,5 +1,6 @@
 import io
 import json
+from typing import Generator
 
 import numpy as np
 import soundfile
@@ -14,8 +15,8 @@ from api.libs.midi import convert_midi_to_features
 from api.libs.wav import preprocess_wav_file, reshape_to_segments
 from api.models.ddsp.loss import Loss, LossInputs
 from api.models.midi_aligner.midi_aligner import AlignedMidi
-
 from .load_model import load_model
+from api.controllers.backend_api.openapi import models
 from .model import DDSP, DDSP_Decoder, Z_Encoder
 
 MODEL_WEIGHTS_PATH = "api/models/ddsp/weights/best_model.pth"
@@ -128,7 +129,7 @@ class DDSPModel:
         mean_loudness: float,
         std_loudness: float,
         instrument_names: list[str],
-    ) -> TrainOutput:
+    ) -> models.TrainDDSPOutputStream:
         optimizer = torch.optim.Adam(
             [z_features, pitches, loudnesses], lr=train_config.lr
         )
@@ -138,7 +139,7 @@ class DDSPModel:
         loss_fn = Loss(self.device, loss_config)
         epochs: int = train_config.epochs
         print(f"epochs: {epochs}")
-        pbar = tqdm(range(1), desc="Training")
+        pbar = tqdm(range(epochs), desc="Training")
         for epoch in pbar:
             optimizer.zero_grad()
             signals = []
@@ -175,14 +176,22 @@ class DDSPModel:
                         },
                         step=epoch,
                     )
+            
+            # 10エポックごとに進捗状況を返す
+            if (epoch + 1) % 10 == 0:
+                yield models.TrainingProgress(
+                    current_epoch=epoch + 1,
+                    total_epochs=epochs,
+                    loss=float(loss.item())
+                )
         
         wandb.finish()
 
         loudnesses = loudnesses * std_loudness + mean_loudness
 
-        return TrainOutput(
+        yield models.Features(
             features=[
-                Feature(
+                models.Feature(
                     instrument_name=instrument_names[i],
                     z_feature=z_features[i].reshape(-1,16).detach().cpu().numpy().tolist(),
                     pitch=pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
@@ -192,7 +201,7 @@ class DDSPModel:
             ],
         )
 
-    def train(self, train_input: TrainInput) -> TrainOutput:
+    def train(self, train_input: TrainInput) -> models.TrainDDSPOutputStream:
         self.logger.info("Start training...")
 
         train_config = TrainConfig.from_config_path(TRAIN_CONFIG_PATH)

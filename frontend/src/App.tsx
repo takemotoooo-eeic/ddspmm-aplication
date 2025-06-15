@@ -19,9 +19,9 @@ import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
 import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
-import { BodyTrainDdspDdspTrainPost, DDSPGenerateParams } from './orval/models/backend-api';
+import { DDSPGenerateParams } from './orval/models/backend-api';
+import { LearnData } from './types/learnData';
 import { TrackData } from './types/trackData';
-
 
 // ダークテーマ
 const theme = createTheme({
@@ -50,6 +50,7 @@ export default function App() {
   const animationFrameRef = useRef<number>(0);
   const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const playbackStartTimeRef = useRef<number>(0);
+  const [learnData, setLearnData] = useState<LearnData | null>(null);
 
   const handleTrackClick = (track: TrackData) => {
     setSelectedTrack(track);
@@ -197,12 +198,38 @@ export default function App() {
   const handleImportTracks = async () => {
     if (!wavFile || !midFile) return;
 
-    const body: BodyTrainDdspDdspTrainPost = {
-      midi_file: midFile,
-      wav_file: wavFile,
-    };
+    const form = new FormData();
+    form.append('wav_file', wavFile);
+    form.append('midi_file', midFile);
+    let features: { features: Array<{ instrument_name: string; pitch: number[]; loudness: number[]; z_feature: number[][] }> } = { features: [] };
     try {
-      const features = await trainTrigger(body);
+      const resp = await fetch('/backend-api/ddsp/train', {
+        method: 'POST',
+        body: form,
+        headers: { Accept: 'application/x-ndjson' }
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop()!;
+        for (const line of lines) {
+          if (!line) continue;
+          const data = JSON.parse(line);
+          if ('current_epoch' in data) {
+            setLearnData(data);
+          } else if ('features' in data) {
+            features.features = data.features;
+          }
+        }
+      }
+
       const newTracks: TrackData[] = [];
 
       for (const feature of features.features) {
@@ -374,6 +401,7 @@ export default function App() {
             midFile={midFile}
             setMidFile={setMidFile}
             onImport={handleImportTracks}
+            learnData={learnData}
           />
         )
       }
