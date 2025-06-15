@@ -1,4 +1,4 @@
-import { Box, Button, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Box, Button, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useState } from 'react';
 import { TrackData } from '../../types/trackData';
 
@@ -10,6 +10,7 @@ interface EditDialogProps {
 
 export const EditDialog = ({ selectedTrack, tracks, setTracks }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleEditModeChange = (
     event: React.MouseEvent<HTMLElement>,
@@ -46,29 +47,42 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks }: EditDialogProps
         borderBottom: '1px solid #333',
         px: 2,
       }}>
-        <Typography variant="subtitle1">Edit</Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <ToggleButtonGroup
-            value={editMode}
-            exclusive
-            onChange={handleEditModeChange}
-            size="small"
-            sx={{
-              '& .MuiToggleButton-root': {
+        <ToggleButtonGroup
+          value={editMode}
+          exclusive
+          onChange={handleEditModeChange}
+          size="small"
+          sx={{
+            '& .MuiToggleButton-root': {
+              color: '#fff',
+              borderColor: '#333',
+              height: '32px',
+              minWidth: '80px',
+              '&.Mui-selected': {
+                bgcolor: '#333',
                 color: '#fff',
-                borderColor: '#333',
-                height: '32px',
-                minWidth: '80px',
-                '&.Mui-selected': {
-                  bgcolor: '#333',
-                  color: '#fff',
-                },
               },
+            },
+          }}
+        >
+          <ToggleButton value="pitch">Pitch</ToggleButton>
+          <ToggleButton value="loudness">Loudness</ToggleButton>
+        </ToggleButtonGroup>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Button
+            variant="contained"
+            onClick={() => setIsEditing(!isEditing)}
+            sx={{
+              bgcolor: isEditing ? '#646cff' : '#333',
+              '&:hover': {
+                bgcolor: isEditing ? '#535bf2' : '#444',
+              },
+              height: '32px',
+              minWidth: '80px',
             }}
           >
-            <ToggleButton value="pitch">Pitch</ToggleButton>
-            <ToggleButton value="loudness">Loudness</ToggleButton>
-          </ToggleButtonGroup>
+            Edit
+          </Button>
           <Button
             variant="contained"
             onClick={handleRegenerate}
