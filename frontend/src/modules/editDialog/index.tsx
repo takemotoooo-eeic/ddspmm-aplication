@@ -6,13 +6,15 @@ import { Timeline } from '../timeLine';
 import { PianoRollKeys } from './PianoRollKeys';
 
 interface EditDialogProps {
+  currentTime: number;
   selectedTrack: TrackData;
   tracks: TrackData[];
   setTracks: (tracks: TrackData[]) => void;
   setSelectedTrack: (track: TrackData | null) => void;
+  onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
-export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack }: EditDialogProps) => {
+export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -126,15 +128,30 @@ export const EditDialog = ({ selectedTrack, tracks, setTracks, setSelectedTrack 
             <PianoRollKeys />
           </Box>
           {/* 右側：タイムライン＋ピアノロール本体 */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {/* タイムライン */}
-            <Timeline
-              duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
-              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
-              height={20}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }} onClick={onTimeLineClick}>
+            {/* 再生位置カーソル（全体） */}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+                top: 0,
+                height: '100%',
+                width: 2,
+                bgcolor: 'rgba(255, 255, 255, 0.3)',
+                zIndex: 2,
+                pointerEvents: 'none',
+              }}
             />
+            {/* タイムライン */}
+            <Box sx={{ position: 'relative', height: 20 }}>
+              <Timeline
+                duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
+                width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
+                height={20}
+              />
+            </Box>
             {/* ピアノロール本体 */}
-            <Box sx={{ flex: 1, bgcolor: '#181818' }}>
+            <Box sx={{ flex: 1, bgcolor: '#181818', position: 'relative' }}>
               {/* ここにノートや波形を描画予定 */}
             </Box>
           </Box>

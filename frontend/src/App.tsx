@@ -391,10 +391,12 @@ export default function App() {
       {
         selectedTrack && (
           <EditDialog
+            currentTime={currentTime}
             selectedTrack={selectedTrack}
             tracks={tracks}
             setTracks={setTracks}
             setSelectedTrack={setSelectedTrack}
+            onTimeLineClick={handleTimelineClick}
           />
         )
       }
