@@ -11,9 +11,9 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
-import { WaveformDisplay } from './components/wavDisplay/WaveformDisplay';
 import { useDisclosure } from './hooks/useDisclosure';
 import { TrackSidebar } from './modules/trackSidebar';
+import { TrackRowWaveform } from './modules/trackWaveform';
 import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
 import { BodyTrainDdspDdspTrainPost, DDSPGenerateParams } from './orval/models/backend-api';
 import { TrackData } from './types/trackData';
@@ -129,114 +129,106 @@ export default function App() {
       {/* ヘッダースペーサー */}
       <Toolbar />
 
-      {/* サイドバー：トラック一覧（固定表示） */}
-      <TrackSidebar
-        tracks={tracks}
-        selectedTrackId={selectedTrack}
-        onTrackClick={handleTrackClick}
-        onMuteToggle={handleMuteToggle}
-        onVolumeChange={handleVolumeChange}
-      />
-
       {/* メインビューポート */}
-      <Box
-        sx={{
+      <Box sx={{ display: 'flex', height: '100%' }}>
+        {/* サイドバー（完全固定） */}
+        <Box sx={{
+          width: 280,
+          position: 'fixed',
+          top: 64, // AppBarの高さ
+          left: 0,
+          height: 'calc(100vh - 64px)',
+          zIndex: 20,
+          bgcolor: '#1e1e1e',
           display: 'flex',
-          flexGrow: 1,
-          height: `calc(100vh - 64px)`, // AppBar の高さ分を引く
-          bgcolor: 'background.default',
-        }}
-      >
-        {/* タイムライン＋コントロールパネル */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, ml: '240px' }}>
-          {/* 上部：タイムライン */}
-          <Box
-            sx={{
-              flexGrow: 1,
-              bgcolor: 'background.default',
-              p: 2,
-              overflowX: 'auto', // 横スクロール
-              minWidth: 1200,    // 必要に応じて調整
-            }}
-          >
-            {/* 各トラックの波形を縦に並べて表示 */}
+          flexDirection: 'column',
+          borderRight: '1px solid #333'
+        }}>
+          {/* 時間表示バー */}
+          {tracks.map((track, idx) => (
+            <TrackSidebar
+              key={track.id}
+              track={track}
+              selected={selectedTrack === track.id}
+              onClick={() => handleTrackClick(track.id)}
+              onMuteToggle={() => handleMuteToggle(track.id)}
+              onVolumeChange={(volume) => handleVolumeChange(track.id, volume)}
+            />
+          ))}
+        </Box>
+        {/* 波形部分（横スクロール） */}
+        <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default' }}>
+          <Box>
             {tracks.map((track, idx) => (
-              <Box key={track.id} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ width: 2000, height: 60, bgcolor: '#222', borderRadius: 1, overflow: 'hidden' }}>
-                  <WaveformDisplay
-                    wavData={track.wavData}
-                    width={2000}
-                    isLastTrack={idx === tracks.length - 1}
-                  />
-                </Box>
-              </Box>
+              <TrackRowWaveform
+                key={track.id}
+                track={track}
+              />
             ))}
           </Box>
-
-          {/* 下部：コントロールパネル */}
         </Box>
-
-        {/* トラックインポートダイアログ */}
-        {
-          isOpenImportTracksDialog && (
-            <Dialog open={isOpenImportTracksDialog} onClose={closeImportTracksDialog}>
-              <Box sx={{ bgcolor: 'background.paper', p: 3, minWidth: 400 }}>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  IMPORT TRACKS
-                </Typography>
-                {/* WAV ファイル選択 */}
-                <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-                  Select WAV File
-                  <input
-                    type="file"
-                    accept="audio/wav"
-                    hidden
-                    onChange={e => {
-                      const file = e.target.files?.[0] || null;
-                      setWavFile(file);
-                    }}
-                  />
-                </Button>
-                {wavFile && (
-                  <Typography variant="body2" sx={{ mb: 2 }}>
-                    Selected: {wavFile.name}
-                  </Typography>
-                )}
-
-                {/* MIDI ファイル選択 */}
-                <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-                  Select MIDI File
-                  <input
-                    type="file"
-                    accept="audio/midi, .mid"
-                    hidden
-                    onChange={e => {
-                      const file = e.target.files?.[0] || null;
-                      setMidFile(file);
-                    }}
-                  />
-                </Button>
-                {midFile && (
-                  <Typography variant="body2" sx={{ mb: 2 }}>
-                    Selected: {midFile.name}
-                  </Typography>
-                )}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                  <Button onClick={closeImportTracksDialog}>Cancel</Button>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    sx={{ ml: 2 }}
-                    onClick={handleImportTracks}
-                  >
-                    Import
-                  </Button>
-                </Box>
-              </Box>
-            </Dialog>
-          )
-        }
       </Box>
+
+      {/* トラックインポートダイアログ */}
+      {
+        isOpenImportTracksDialog && (
+          <Dialog open={isOpenImportTracksDialog} onClose={closeImportTracksDialog}>
+            <Box sx={{ bgcolor: 'background.paper', p: 3, minWidth: 400 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                IMPORT TRACKS
+              </Typography>
+              {/* WAV ファイル選択 */}
+              <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
+                Select WAV File
+                <input
+                  type="file"
+                  accept="audio/wav"
+                  hidden
+                  onChange={e => {
+                    const file = e.target.files?.[0] || null;
+                    setWavFile(file);
+                  }}
+                />
+              </Button>
+              {wavFile && (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Selected: {wavFile.name}
+                </Typography>
+              )}
+
+              {/* MIDI ファイル選択 */}
+              <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
+                Select MIDI File
+                <input
+                  type="file"
+                  accept="audio/midi, .mid"
+                  hidden
+                  onChange={e => {
+                    const file = e.target.files?.[0] || null;
+                    setMidFile(file);
+                  }}
+                />
+              </Button>
+              {midFile && (
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Selected: {midFile.name}
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                <Button onClick={closeImportTracksDialog}>Cancel</Button>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  sx={{ ml: 2 }}
+                  onClick={handleImportTracks}
+                >
+                  Import
+                </Button>
+              </Box>
+            </Box>
+          </Dialog>
+        )
+      }
     </ThemeProvider>
   );
 }

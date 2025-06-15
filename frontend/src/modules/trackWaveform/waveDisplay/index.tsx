@@ -7,7 +7,6 @@ interface WaveformDisplayProps {
   width?: number;
   trackColor?: string;
   showTrackDivider?: boolean;
-  isLastTrack?: boolean;
 }
 
 export const WaveformDisplay = ({
@@ -16,7 +15,6 @@ export const WaveformDisplay = ({
   width = 200,
   trackColor = '#646cff',
   showTrackDivider = true,
-  isLastTrack = false,
 }: WaveformDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -96,7 +94,7 @@ export const WaveformDisplay = ({
         bgcolor: '#1e1e1e',
         borderRadius: 1,
         overflow: 'hidden',
-        borderBottom: !isLastTrack ? '1px solid #333' : 'none',
+        borderBottom: '1px solid #333',
       }}
     >
       <canvas
