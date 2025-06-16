@@ -27,6 +27,8 @@ LOUDNESS_PATH = "api/models/ddsp/statistics/loudness.json"
 
 
 class TrainInput(BaseModel):
+    epochs: int
+    lr: float
     wav_file: bytes
     num_instruments: int
     instrument_names: list[str]
@@ -129,15 +131,16 @@ class DDSPModel:
         mean_loudness: float,
         std_loudness: float,
         instrument_names: list[str],
+        epochs: int,
+        lr: float,
     ) -> models.TrainDDSPOutputStream:
         optimizer = torch.optim.Adam(
-            [z_features, pitches, loudnesses], lr=train_config.lr
+            [z_features, pitches, loudnesses], lr=lr
         )
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=[2000, 3000], gamma=0.1
         )
         loss_fn = Loss(self.device, loss_config)
-        epochs: int = train_config.epochs
         print(f"epochs: {epochs}")
         pbar = tqdm(range(epochs), desc="Training")
         for epoch in pbar:
@@ -242,6 +245,8 @@ class DDSPModel:
             mean_loudness=mean_loudness,
             std_loudness=std_loudness,
             instrument_names=train_input.instrument_names,
+            epochs=train_input.epochs,
+            lr=train_input.lr,
         )
 
     def generate(

@@ -1,4 +1,6 @@
-import { Box, Button, CircularProgress, Dialog, LinearProgress, Typography } from '@mui/material';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Box, Button, CircularProgress, Collapse, Dialog, IconButton, LinearProgress, TextField, Typography } from '@mui/material';
 import React, { useState } from 'react';
 import { LearnData } from '../../types/learnData';
 
@@ -9,7 +11,7 @@ interface ImportTrackDialogProps {
   setWavFile: (file: File | null) => void;
   midFile: File | null;
   setMidFile: (file: File | null) => void;
-  onImport: () => void;
+  onImport: (epochs: number, lr: number) => void;
   learnData: LearnData | null;
   setLearnData: (data: LearnData | null) => void;
 }
@@ -26,11 +28,14 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
   setLearnData
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [epochs, setEpochs] = useState(100);
+  const [lr, setLr] = useState(0.1);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const handleImport = async () => {
     setIsLoading(true);
     try {
-      await onImport();
+      await onImport(epochs, lr);
     } finally {
       setIsLoading(false);
       setLearnData(null);
@@ -82,6 +87,40 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
             Selected: {midFile.name}
           </Typography>
         )}
+
+        {/* 学習パラメータ設定 */}
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="subtitle1">Settings</Typography>
+            <IconButton onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}>
+              {showAdvancedSettings ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={showAdvancedSettings}>
+            <TextField
+              label="Epochs"
+              type="number"
+              value={epochs}
+              onChange={(e) => setEpochs(Number(e.target.value))}
+              fullWidth
+              sx={{ mb: 2 }}
+              inputProps={{ min: 1 }}
+            />
+            <TextField
+              label="Learning Rate"
+              type="number"
+              value={lr}
+              onChange={(e) => setLr(Number(e.target.value))}
+              fullWidth
+              inputProps={{
+                min: 0.0001,
+                max: 1,
+                step: 0.0001
+              }}
+            />
+          </Collapse>
+        </Box>
+
         {learnData && (
           <>
             <Typography variant="body2" sx={{ mb: 1 }}>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Body, File, Form, UploadFile
 from typing import Generator
 import json
 from api.controllers.backend_api.openapi import models
@@ -19,6 +19,8 @@ ddsp_router = APIRouter()
 async def train_ddsp(
     wav_file: UploadFile = File(..., description="WAVファイル"),
     midi_file: UploadFile = File(..., description="MIDIファイル"),
+    epochs: int = Form(..., description="エポック数"),
+    lr: float = Form(..., description="学習率"),
 ) -> StreamingResponse:
     try:
         verify_wav_file_format(wav_file)
@@ -27,6 +29,11 @@ async def train_ddsp(
         midi_file_bytes = await midi_file.read()
         wav_file_bytes = await wav_file.read()
 
+        params = models.TrainDDSPParams(
+            epochs=epochs,
+            lr=lr,
+        )
+
         midi_aligner = MidiAligner()
         aligned_midi_list, num_instruments, instrument_names = midi_aligner.align(
             wav_file_bytes, midi_file_bytes
@@ -34,6 +41,8 @@ async def train_ddsp(
 
         ddsp_model = DDSPModel()
         train_input = TrainInput(
+            epochs=params.epochs,
+            lr=params.lr,
             wav_file=wav_file_bytes,
             num_instruments=num_instruments,
             instrument_names=instrument_names,
