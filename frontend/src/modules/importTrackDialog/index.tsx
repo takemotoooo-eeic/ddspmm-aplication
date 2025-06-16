@@ -11,6 +11,7 @@ interface ImportTrackDialogProps {
   setMidFile: (file: File | null) => void;
   onImport: () => void;
   learnData: LearnData | null;
+  setLearnData: (data: LearnData | null) => void;
 }
 
 export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
@@ -21,7 +22,8 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
   midFile,
   setMidFile,
   onImport,
-  learnData
+  learnData,
+  setLearnData
 }) => {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -31,13 +33,14 @@ export const ImportTrackDialog: React.FC<ImportTrackDialogProps> = ({
       await onImport();
     } finally {
       setIsLoading(false);
+      setLearnData(null);
     }
   };
 
   const isImportEnabled = wavFile && midFile && !isLoading;
 
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog open={open} onClose={() => !isLoading && onClose()}>
       <Box sx={{ bgcolor: 'background.paper', p: 3, minWidth: 400 }}>
         <Typography variant="h6" sx={{ mb: 2 }}>
           IMPORT TRACKS

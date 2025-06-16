@@ -309,7 +309,10 @@ export default function App() {
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <RefreshButton onClick={() => setTracks([])} />
+            <RefreshButton onClick={() => {
+              setTracks([]);
+              setSelectedTrack(null);
+            }} />
             <AddButton disabled={tracks.length !== 0} onClick={openImportTracksDialog} />
           </Box>
         </Toolbar>
@@ -402,6 +405,7 @@ export default function App() {
             setMidFile={setMidFile}
             onImport={handleImportTracks}
             learnData={learnData}
+            setLearnData={setLearnData}
           />
         )
       }
