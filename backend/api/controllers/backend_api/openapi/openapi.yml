@@ -7,6 +7,9 @@ components:
           format: binary
           title: Midi File
           type: string
+        params:
+          $ref: '#/components/schemas/TrainDDSPParams'
+          description: パラメータ
         wav_file:
           description: WAVファイル
           format: binary
@@ -15,6 +18,7 @@ components:
       required:
       - wav_file
       - midi_file
+      - params
       title: Body_train_ddsp_ddsp_train_post
       type: object
     DDSPGenerateParams:
@@ -90,6 +94,19 @@ components:
           title: Detail
           type: array
       title: HTTPValidationError
+      type: object
+    TrainDDSPParams:
+      properties:
+        epochs:
+          title: Epochs
+          type: integer
+        lr:
+          title: Lr
+          type: number
+      required:
+      - epochs
+      - lr
+      title: TrainDDSPParams
       type: object
     ValidationError:
       properties:

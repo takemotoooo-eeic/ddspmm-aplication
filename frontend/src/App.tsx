@@ -195,12 +195,14 @@ export default function App() {
     };
   }, []);
 
-  const handleImportTracks = async () => {
+  const handleImportTracks = async (epochs: number, lr: number) => {
     if (!wavFile || !midFile) return;
 
     const form = new FormData();
     form.append('wav_file', wavFile);
     form.append('midi_file', midFile);
+    form.append('epochs', epochs.toString());
+    form.append('lr', lr.toString());
     let features: { features: Array<{ instrument_name: string; pitch: number[]; loudness: number[]; z_feature: number[][] }> } = { features: [] };
     try {
       const resp = await fetch('/backend-api/ddsp/train', {
