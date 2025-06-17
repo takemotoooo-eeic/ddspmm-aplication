@@ -28,7 +28,6 @@ class TDLossConfig(BaseModel):
     ratio: float
     target: TargetType
 
-
 class FDLossConfig(BaseModel):
     type: LossType = LossType.FD
     ratio: float

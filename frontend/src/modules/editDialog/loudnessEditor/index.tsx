@@ -15,16 +15,16 @@ interface LoudnessEditorProps {
 
 // dBからY座標への変換関数
 const dbToY = (db: number): number => {
-  const minDb = -100;
-  const maxDb = 0;
+  const minDb = -300;
+  const maxDb = 300;
   const height = 600;
   return height - ((db - minDb) / (maxDb - minDb)) * height;
 };
 
 // Y座標からdBへの変換関数
 const yToDb = (y: number): number => {
-  const minDb = -100;
-  const maxDb = 0;
+  const minDb = -300;
+  const maxDb = 300;
   const height = 600;
   return minDb + ((height - y) / height) * (maxDb - minDb);
 };
@@ -125,7 +125,7 @@ export const LoudnessEditor = ({
     const sampleRate = 31.25;
     const loudnessData = tempLoudness || selectedTrack.features.loudness;
 
-    loudnessData.forEach((db, index) => {
+    loudnessData.forEach((db: number, index: number) => {
       const x = (index / sampleRate) * timeScale;
       const y = dbToY(db);
       points.push({ x, y });
@@ -155,7 +155,7 @@ export const LoudnessEditor = ({
 
   // dBスケールのメモリを描画する関数
   const renderDbScale = () => {
-    const dbValues = [-20, -30, -40, -50, -60, -70, -80, -90, -100];
+    const dbValues = [300, 250, 200, 150, 100, 50, 0, -50, -100, -150, -200, -250, -300];
     return (
       <Box
         sx={{
@@ -178,12 +178,13 @@ export const LoudnessEditor = ({
             sx={{
               color: '#fff',
               fontSize: '12px',
-              textAlign: 'center',
+              textAlign: 'right',
+              pr: 1,
               borderBottom: '1px solid #333',
               pb: 0.5,
             }}
           >
-            {db} dB
+            {db}
           </Box>
         ))}
       </Box>
@@ -259,7 +260,7 @@ export const LoudnessEditor = ({
             bgcolor: '#181818',
             position: 'relative',
             minWidth: 0,
-            height: '600px',
+            height: '750px',
             overflowX: 'auto',
             overflowY: 'auto',
             '&::-webkit-scrollbar': {

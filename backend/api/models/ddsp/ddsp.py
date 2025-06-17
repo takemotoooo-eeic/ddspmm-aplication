@@ -140,7 +140,9 @@ class DDSPModel:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=[2000, 3000], gamma=0.1
         )
-        loss_fn = Loss(self.device, loss_config)
+        # TODO: ここちゃんとする
+        instrument_names_fixed = ["ob", "vc"]
+        loss_fn = Loss(self.device, loss_config, instrument_names_fixed)
         print(f"epochs: {epochs}")
         pbar = tqdm(range(epochs), desc="Training")
         for epoch in pbar:
@@ -161,6 +163,7 @@ class DDSPModel:
                 loudness=loudnesses,
                 pitch=pitches,
                 z_feature=z_features,
+                instrument_num=num_instruments,
             )
             loss: torch.Tensor = loss_fn(loss_inputs)
             loss.backward()
