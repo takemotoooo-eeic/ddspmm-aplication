@@ -52,30 +52,33 @@ class LossInputs(BaseModel):
         loudness: torch.Tensor | None = None,
         pitch: torch.Tensor | None = None,
         z_feature: torch.Tensor | None = None,
+        instrument_num: int = 1,
     ) -> "LossInputs":
         inputs: list[MelLossInputs | TDLossInputs | FDLossInputs] = []
         for loss_item in loss_config.loss:
             if isinstance(loss_item, MelLossConfig):
                 inputs.append(MelLossInputs(y_pred=signal_pred, y_target=signal_target))
             elif isinstance(loss_item, TDLossConfig):
-                if loss_item.target == TargetType.LOUDNESS:
-                    inputs.append(TDLossInputs(y=loudness))
-                elif loss_item.target == TargetType.PITCH:
-                    inputs.append(TDLossInputs(y=pitch))
-                elif loss_item.target == TargetType.Z_FEATURE:
-                    inputs.append(TDLossInputs(y=z_feature))
+                for i in range(instrument_num):
+                    if loss_item.target == TargetType.LOUDNESS:
+                        inputs.append(TDLossInputs(y=loudness[i]))
+                    elif loss_item.target == TargetType.PITCH:
+                        inputs.append(TDLossInputs(y=pitch[i]))
+                    elif loss_item.target == TargetType.Z_FEATURE:
+                        inputs.append(TDLossInputs(y=z_feature[i]))
             elif isinstance(loss_item, FDLossConfig):
-                if loss_item.target == TargetType.LOUDNESS:
-                    inputs.append(FDLossInputs(y=loudness))
-                elif loss_item.target == TargetType.PITCH:
-                    inputs.append(FDLossInputs(y=pitch))
-                elif loss_item.target == TargetType.Z_FEATURE:
-                    inputs.append(FDLossInputs(y=z_feature))
+                for i in range(instrument_num):
+                    if loss_item.target == TargetType.LOUDNESS:
+                        inputs.append(FDLossInputs(y=loudness[i]))
+                    elif loss_item.target == TargetType.PITCH:
+                        inputs.append(FDLossInputs(y=pitch[i]))
+                    elif loss_item.target == TargetType.Z_FEATURE:
+                        inputs.append(FDLossInputs(y=z_feature[i]))
         return cls(inputs=inputs)
 
 
 class Loss(nn.Module):
-    def __init__(self, device: torch.device, loss_config: LossConfig):
+    def __init__(self, device: torch.device, loss_config: LossConfig, instrument_names: list[str]):
         super().__init__()
         self.device = device
         self.loss_components: list[
@@ -92,19 +95,23 @@ class Loss(nn.Module):
                         overlap=loss_item.overlap,
                     )
                 )
+                self.loss_configs.append(loss_item)
             elif isinstance(loss_item, TDLossConfig):
-                self.loss_components.append(
-                    TimeDomainRegularizationLoss(
-                        device=device, target_type=loss_item.target
+                for instrument_name in instrument_names:
+                    self.loss_components.append(
+                        TimeDomainRegularizationLoss(
+                            device=device, target_type=loss_item.target, instrument_name=instrument_name
+                        )
                     )
-                )
+                    self.loss_configs.append(loss_item)
             elif isinstance(loss_item, FDLossConfig):
-                self.loss_components.append(
-                    FrequencyDomainRegularizationLoss(
-                        device=device, target_type=loss_item.target
+                for instrument_name in instrument_names:
+                    self.loss_components.append(
+                        FrequencyDomainRegularizationLoss(
+                            device=device, target_type=loss_item.target, instrument_name=instrument_name
+                        )
                     )
-                )
-            self.loss_configs.append(loss_item)
+                    self.loss_configs.append(loss_item)
 
     def forward(self, inputs: LossInputs) -> torch.Tensor:
         total_loss = torch.tensor(0.0, device=self.device, requires_grad=True)
