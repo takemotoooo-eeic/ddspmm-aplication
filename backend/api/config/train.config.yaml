@@ -12,7 +12,7 @@ loss:
     scales: [4096, 2048, 1024, 512, 256, 128]
     overlap: 0.75
   - type: "td"
-    ratio: 0.01
+    ratio: 1
     target: "loudness"
   # - type: "fd"
   #   target: "pitch"
