@@ -112,6 +112,8 @@ class Loss(nn.Module):
                         )
                     )
                     self.loss_configs.append(loss_item)
+            else:
+                raise ValueError(f"Unknown loss type!!!!!!!!!!!!!!!!!")
 
     def forward(self, inputs: LossInputs) -> torch.Tensor:
         total_loss = torch.tensor(0.0, device=self.device, requires_grad=True)

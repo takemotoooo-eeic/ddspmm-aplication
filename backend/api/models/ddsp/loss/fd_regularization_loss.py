@@ -17,31 +17,34 @@ class FrequencyDomainRegularizationLoss(nn.Module):
         with open(fd_mean_path, "r") as f:
             fd_mean_data = json.load(f)
         if target_type == TargetType.LOUDNESS:
-            self.mean = fd_mean_data["loudness"][instrument_name]
+            self.mean = torch.tensor(fd_mean_data["loudness"][instrument_name], device=device, dtype=torch.float32)
         elif target_type == TargetType.PITCH:
-            self.mean = fd_mean_data["pitch"][instrument_name]
+            self.mean = torch.tensor(fd_mean_data["pitch"][instrument_name], device=device, dtype=torch.float32)
         elif target_type == TargetType.Z_FEATURE:
-            self.mean = fd_mean_data["z_feature"][instrument_name]
+            self.mean = torch.tensor(fd_mean_data["z_feature"][instrument_name], device=device, dtype=torch.float32)
 
         with open(fd_std_path, "r") as f:
             fd_std_data = json.load(f)
         if target_type == TargetType.LOUDNESS:
-            self.std = fd_std_data["loudness"][instrument_name]
+            self.std = torch.tensor(fd_std_data["loudness"][instrument_name], device=device, dtype=torch.float32)
         elif target_type == TargetType.PITCH:
-            self.std = fd_std_data["pitch"][instrument_name]
+            self.std = torch.tensor(fd_std_data["pitch"][instrument_name], device=device, dtype=torch.float32)
         elif target_type == TargetType.Z_FEATURE:
-            self.std = fd_std_data["z_feature"][instrument_name]
-        self.norm_distribution = torch.distributions.Normal(
-            loc=self.mean, scale=self.std
-        )
+            self.std = torch.tensor(fd_std_data["z_feature"][instrument_name], device=device, dtype=torch.float32)
+        
+        # ゼロ除算を避けるために、標準偏差に下限値を設ける
+        self.std = torch.clamp(self.std, min=1e-6)
 
     def forward(self, y: torch.Tensor) -> torch.Tensor:
         y_fft: torch.Tensor = torch.fft.fft(y, dim=1)
         y_fft = y_fft.abs()
         if y_fft.ndim == 3:
-            y_fft = y_fft[:, 1 : y_fft.shape[-1] // 2, :]
+            y_fft = y_fft[:, 1 : y_fft.shape[1] // 2, :]
         else:
-            y_fft = y_fft[:, 1 : y_fft.shape[-1] // 2]
-        log_prob: torch.Tensor = self.norm_distribution.log_prob(y_fft)
-        loss = -log_prob.sum()
-        return loss
+            y_fft = y_fft[:, 1 : y_fft.shape[1] // 2]
+        
+        diff = y_fft - self.mean
+        loss = (diff ** 2) / (2 * self.std ** 2)
+        
+        loss_val = loss.sum()
+        return loss_val
