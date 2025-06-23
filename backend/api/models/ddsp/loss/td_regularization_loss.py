@@ -3,7 +3,6 @@ import torch.nn as nn
 from api.config.model.loss_config import TargetType
 import json
 import os
-from api.libs.logging import get_logger
 
 class TimeDomainRegularizationLoss(nn.Module):
     def __init__(
@@ -12,7 +11,6 @@ class TimeDomainRegularizationLoss(nn.Module):
         target_type: TargetType,
         instrument_name: str,
     ):
-        self.logger = get_logger()
         super().__init__()
         self.device = device
         self.target_type = target_type
@@ -27,8 +25,6 @@ class TimeDomainRegularizationLoss(nn.Module):
         with open(delta_delta_var_path, "r") as f:
             delta_delta_var_data = json.load(f)
         if target_type == TargetType.LOUDNESS:
-            print(f"{instrument_name} delta_var: {delta_var_data['loudness'][instrument_name]}")
-            print(f"{instrument_name} delta_delta_var: {delta_delta_var_data['loudness'][instrument_name]}")
             self.real_delta_y_var = torch.tensor(delta_var_data["loudness"][instrument_name], device=device)
             self.real_delta_delta_y_var = torch.tensor(delta_delta_var_data["loudness"][instrument_name], device=device)
         elif target_type == TargetType.PITCH:

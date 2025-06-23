@@ -1,7 +1,7 @@
 from enum import Enum
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class LossType(str, Enum):
@@ -36,6 +36,27 @@ class FDLossConfig(BaseModel):
 
 class LossConfig(BaseModel):
     loss: list[MelLossConfig | TDLossConfig | FDLossConfig]
+
+    @field_validator('loss', mode='before')
+    @classmethod
+    def validate_loss_configs(cls, v):
+        if isinstance(v, list):
+            validated_losses = []
+            for item in v:
+                if isinstance(item, dict):
+                    loss_type = item.get('type')
+                    if loss_type == 'mel':
+                        validated_losses.append(MelLossConfig(**item))
+                    elif loss_type == 'td':
+                        validated_losses.append(TDLossConfig(**item))
+                    elif loss_type == 'fd':
+                        validated_losses.append(FDLossConfig(**item))
+                    else:
+                        raise ValueError(f"Unknown loss type: {loss_type}")
+                else:
+                    validated_losses.append(item)
+            return validated_losses
+        return v
 
     @classmethod
     def from_config_path(cls, config_path: str) -> "LossConfig":
