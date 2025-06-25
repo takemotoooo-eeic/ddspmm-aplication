@@ -44,7 +44,7 @@ class MidiAligner:
         self,
         sr: float = 22050,
         hop: int = 512,
-        feature_rate: int = 100,
+        feature_rate: int = 50,
         step_weight: np.ndarray = np.array([1.5, 1.5, 2.0]),
         threshold_rec: int = 10**7,
     ):
