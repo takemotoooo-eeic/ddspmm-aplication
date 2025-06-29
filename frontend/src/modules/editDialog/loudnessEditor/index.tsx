@@ -15,16 +15,16 @@ interface LoudnessEditorProps {
 
 // dBからY座標への変換関数
 const dbToY = (db: number): number => {
-  const minDb = -300;
-  const maxDb = 300;
+  const minDb = -80;
+  const maxDb = 0;
   const height = 600;
   return height - ((db - minDb) / (maxDb - minDb)) * height;
 };
 
 // Y座標からdBへの変換関数
 const yToDb = (y: number): number => {
-  const minDb = -300;
-  const maxDb = 300;
+  const minDb = -80;
+  const maxDb = 0;
   const height = 600;
   return minDb + ((height - y) / height) * (maxDb - minDb);
 };
@@ -155,7 +155,7 @@ export const LoudnessEditor = ({
 
   // dBスケールのメモリを描画する関数
   const renderDbScale = () => {
-    const dbValues = [300, 250, 200, 150, 100, 50, 0, -50, -100, -150, -200, -250, -300];
+    const dbValues = [0, -10, -20, -30, -40, -50, -60, -70, -80];
     return (
       <Box
         sx={{

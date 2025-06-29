@@ -1,6 +1,6 @@
 import CloseIcon from '@mui/icons-material/Close';
 import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
 import { DDSPGenerateParams } from '../../orval/models/backend-api';
 import { TrackData } from '../../types/trackData';
@@ -19,6 +19,9 @@ interface EditDialogProps {
 export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
+  const [height, setHeight] = useState(480);
+  const [isResizing, setIsResizing] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
 
@@ -47,17 +50,86 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
     setTracks(newTracks);
   };
 
+  // リサイズハンドラーのマウスダウンイベント
+  const handleResizeMouseDown = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setIsResizing(true);
+  };
+
+  // マウス移動とマウスアップのイベントリスナー
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newHeight = window.innerHeight - event.clientY;
+      const minHeight = 200;
+      const maxHeight = window.innerHeight - 140;
+
+      if (newHeight >= minHeight && newHeight <= maxHeight) {
+        setHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   return (
-    <Box sx={{
-      position: 'fixed',
-      left: 0,
-      bottom: 0,
-      width: '100vw',
-      height: '480px',
-      bgcolor: '#181818',
-      borderTop: '1px solid #333',
-      zIndex: 20,
-    }}>
+    <Box
+      ref={dialogRef}
+      sx={{
+        position: 'fixed',
+        left: 0,
+        bottom: 0,
+        width: '100vw',
+        height: `${height}px`,
+        bgcolor: '#181818',
+        borderTop: '1px solid #333',
+        zIndex: 20,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* リサイズハンドル */}
+      <Box
+        sx={{
+          width: '100%',
+          height: '8px',
+          bgcolor: '#333',
+          cursor: 'ns-resize',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          '&:hover': {
+            bgcolor: '#444',
+          },
+          '&:active': {
+            bgcolor: '#555',
+          },
+        }}
+        onMouseDown={handleResizeMouseDown}
+      >
+        <Box
+          sx={{
+            width: '40px',
+            height: '4px',
+            bgcolor: '#666',
+            borderRadius: '2px',
+          }}
+        />
+      </Box>
+
       {/* ツールバー部分 */}
       <Box sx={{
         width: '100%',
@@ -136,28 +208,32 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           </IconButton>
         </Box>
       </Box>
-      {editMode === 'pitch' && (
-        <PitchEditor
-          currentTime={currentTime}
-          selectedTrack={selectedTrack}
-          tracks={tracks}
-          setTracks={setTracks}
-          setSelectedTrack={setSelectedTrack}
-          onTimeLineClick={onTimeLineClick}
-          isEditing={isEditing}
-        />
-      )}
-      {editMode === 'loudness' && (
-        <LoudnessEditor
-          currentTime={currentTime}
-          selectedTrack={selectedTrack}
-          tracks={tracks}
-          setTracks={setTracks}
-          setSelectedTrack={setSelectedTrack}
-          onTimeLineClick={onTimeLineClick}
-          isEditing={isEditing}
-        />
-      )}
+
+      {/* エディターコンテンツ */}
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        {editMode === 'pitch' && (
+          <PitchEditor
+            currentTime={currentTime}
+            selectedTrack={selectedTrack}
+            tracks={tracks}
+            setTracks={setTracks}
+            setSelectedTrack={setSelectedTrack}
+            onTimeLineClick={onTimeLineClick}
+            isEditing={isEditing}
+          />
+        )}
+        {editMode === 'loudness' && (
+          <LoudnessEditor
+            currentTime={currentTime}
+            selectedTrack={selectedTrack}
+            tracks={tracks}
+            setTracks={setTracks}
+            setSelectedTrack={setSelectedTrack}
+            onTimeLineClick={onTimeLineClick}
+            isEditing={isEditing}
+          />
+        )}
+      </Box>
     </Box>
   );
 };
