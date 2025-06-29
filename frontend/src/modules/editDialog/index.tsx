@@ -1,5 +1,5 @@
 import CloseIcon from '@mui/icons-material/Close';
-import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Box, Button, IconButton, Slider, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
 import { DDSPGenerateParams } from '../../orval/models/backend-api';
@@ -14,9 +14,12 @@ interface EditDialogProps {
   setTracks: (tracks: TrackData[]) => void;
   setSelectedTrack: (track: TrackData | null) => void;
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+  setZoomLevel: (zoomLevel: number) => void;
+  zoomLevel: number;
+  timeScale: number;
 }
 
-export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick }: EditDialogProps) => {
+export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setSelectedTrack, onTimeLineClick, setZoomLevel, zoomLevel, timeScale }: EditDialogProps) => {
   const [editMode, setEditMode] = useState<'loudness' | 'pitch'>('pitch');
   const [isEditing, setIsEditing] = useState(false);
   const [height, setHeight] = useState(480);
@@ -162,6 +165,37 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <ToggleButton value="loudness">Loudness</ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box sx={{ color: '#fff', fontSize: '12px', mr: 2, minWidth: '60px' }}>
+            H Zoom: {zoomLevel.toFixed(1)}x
+          </Box>
+          <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
+            <Slider
+              value={zoomLevel}
+              onChange={(_, value) => setZoomLevel(value as number)}
+              min={0.5}
+              max={5}
+              step={0.1}
+              sx={{
+                color: '#646cff',
+                '& .MuiSlider-thumb': {
+                  bgcolor: '#646cff',
+                  width: '16px',
+                  height: '16px',
+                  '&:hover': {
+                    width: '20px',
+                    height: '20px',
+                  },
+                },
+                '& .MuiSlider-track': {
+                  bgcolor: '#646cff',
+                  height: '4px',
+                },
+                '& .MuiSlider-rail': {
+                  height: '4px',
+                },
+              }}
+            />
+          </Box>
           <Button
             variant="contained"
             onClick={() => setIsEditing(!isEditing)}
@@ -220,6 +254,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             setSelectedTrack={setSelectedTrack}
             onTimeLineClick={onTimeLineClick}
             isEditing={isEditing}
+            timeScale={timeScale}
           />
         )}
         {editMode === 'loudness' && (
@@ -231,6 +266,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             setSelectedTrack={setSelectedTrack}
             onTimeLineClick={onTimeLineClick}
             isEditing={isEditing}
+            timeScale={timeScale}
           />
         )}
       </Box>

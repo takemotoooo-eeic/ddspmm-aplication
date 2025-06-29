@@ -52,6 +52,10 @@ export default function App() {
   const playbackStartTimeRef = useRef<number>(0);
   const [learnData, setLearnData] = useState<LearnData | null>(null);
 
+
+  const [zoomLevel, setZoomLevel] = useState(1); // ズームレベル（1-10倍）
+  const timeScale = 200 * zoomLevel;
+
   const handleTrackClick = (track: TrackData) => {
     setSelectedTrack(track);
   };
@@ -263,7 +267,7 @@ export default function App() {
   };
 
   // タイムラインクリック時の処理
-  const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>, isEditDialog: boolean = false) => {
     if (!tracks.length) return;
     if (isPlayingRef.current) {
       return;
@@ -271,7 +275,7 @@ export default function App() {
 
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
-    const totalWidth = Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200);
+    const totalWidth = Math.floor((tracks[0].wavData.size / (16000 * 2)) * (isEditDialog ? timeScale : 200));
     const newTime = (clickX / totalWidth) * (tracks[0].wavData.size / (16000 * 2));
 
     setCurrentTime(newTime);
@@ -420,7 +424,10 @@ export default function App() {
             tracks={tracks}
             setTracks={setTracks}
             setSelectedTrack={setSelectedTrack}
-            onTimeLineClick={handleTimelineClick}
+            onTimeLineClick={(event) => handleTimelineClick(event, true)}
+            setZoomLevel={setZoomLevel}
+            zoomLevel={zoomLevel}
+            timeScale={timeScale}
           />
         )
       }

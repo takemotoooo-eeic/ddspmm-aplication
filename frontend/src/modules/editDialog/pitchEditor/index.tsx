@@ -12,6 +12,7 @@ interface PitchEditorProps {
   setSelectedTrack: (track: TrackData | null) => void;
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   isEditing: boolean;
+  timeScale: number;
 }
 
 // Hzからノート番号への変換関数
@@ -45,7 +46,8 @@ export const PitchEditor = ({
   setTracks,
   setSelectedTrack,
   onTimeLineClick,
-  isEditing
+  isEditing,
+  timeScale
 }: PitchEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -90,7 +92,6 @@ export const PitchEditor = ({
 
     setDragPoints(prev => [...prev, { x, y }]);
 
-    const timeScale = 200;
     const sampleRate = 31.25;
     const timeIndex = Math.floor((x / timeScale) * sampleRate);
     const noteNumber = yToNoteNumber(y);
@@ -131,7 +132,6 @@ export const PitchEditor = ({
     if (!selectedTrack) return null;
 
     const points: { x: number; y: number }[] = [];
-    const timeScale = 200;
     const sampleRate = 31.25;
     const pitchData = tempPitch || selectedTrack.features.pitch;
 
@@ -195,14 +195,14 @@ export const PitchEditor = ({
           onScroll={handleScroll}
         >
           <Box sx={{
-            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000,
+            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000,
             height: '100%',
           }}
             onClick={onTimeLineClick}>
             <Box
               sx={{
                 position: 'absolute',
-                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 0,
                 top: 0,
                 height: '100%',
                 width: 2,
@@ -213,7 +213,7 @@ export const PitchEditor = ({
             />
             <Timeline
               duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
-              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
+              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000}
               height={20}
             />
           </Box>
@@ -262,7 +262,7 @@ export const PitchEditor = ({
           onMouseLeave={handleMouseUp}
         >
           <Box sx={{
-            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000,
+            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000,
             height: '100%',
             position: 'relative',
           }}
@@ -271,7 +271,7 @@ export const PitchEditor = ({
             <Box
               sx={{
                 position: 'absolute',
-                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 0,
                 top: 0,
                 height: '100%',
                 width: 2,

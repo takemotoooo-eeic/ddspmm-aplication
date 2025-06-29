@@ -11,6 +11,7 @@ interface LoudnessEditorProps {
   setSelectedTrack: (track: TrackData | null) => void;
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   isEditing: boolean;
+  timeScale: number;
 }
 
 // dBからY座標への変換関数
@@ -36,13 +37,15 @@ export const LoudnessEditor = ({
   setTracks,
   setSelectedTrack,
   onTimeLineClick,
-  isEditing
+  isEditing,
+  timeScale
 }: LoudnessEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragPoints, setDragPoints] = useState<{ x: number; y: number }[]>([]);
   const [tempLoudness, setTempLoudness] = useState<number[] | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1); // ズームレベル（1-10倍）
   const timelineRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +84,6 @@ export const LoudnessEditor = ({
 
     setDragPoints(prev => [...prev, { x, y }]);
 
-    const timeScale = 200;
     const sampleRate = 31.25;
     const timeIndex = Math.floor((x / timeScale) * sampleRate);
     const newDb = yToDb(y);
@@ -121,7 +123,6 @@ export const LoudnessEditor = ({
     if (!selectedTrack) return null;
 
     const points: { x: number; y: number }[] = [];
-    const timeScale = 200;
     const sampleRate = 31.25;
     const loudnessData = tempLoudness || selectedTrack.features.loudness;
 
@@ -224,14 +225,14 @@ export const LoudnessEditor = ({
           onScroll={handleScroll}
         >
           <Box sx={{
-            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000,
+            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000,
             height: '100%',
           }}
             onClick={onTimeLineClick}>
             <Box
               sx={{
                 position: 'absolute',
-                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 0,
                 top: 0,
                 height: '100%',
                 width: 2,
@@ -242,7 +243,7 @@ export const LoudnessEditor = ({
             />
             <Timeline
               duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
-              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
+              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000}
               height={20}
             />
           </Box>
@@ -277,7 +278,7 @@ export const LoudnessEditor = ({
           onMouseLeave={handleMouseUp}
         >
           <Box sx={{
-            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000,
+            width: tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 2000,
             height: '100%',
             position: 'relative',
             minHeight: '100%',
@@ -287,7 +288,7 @@ export const LoudnessEditor = ({
             <Box
               sx={{
                 position: 'absolute',
-                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+                left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * timeScale) : 0,
                 top: 0,
                 height: '100%',
                 width: 2,
