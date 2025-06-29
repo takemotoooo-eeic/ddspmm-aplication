@@ -13,6 +13,8 @@ interface PitchEditorProps {
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   isEditing: boolean;
   timeScale: number;
+  verticalZoomLevel: number;
+  regenerate: () => void;
 }
 
 // Hzからノート番号への変換関数
@@ -21,16 +23,18 @@ const hzToNoteNumber = (hz: number): number => {
 };
 
 // ノート番号からY座標への変換関数
-const noteNumberToY = (noteNumber: number): number => {
+const noteNumberToY = (noteNumber: number, verticalZoomLevel: number = 1): number => {
   const totalKeys = octaves.length * keys.length;
-  const noteHeight = 30; // 各ノートの高さ
+  const baseNoteHeight = 30; // 各ノートの基本高さ
+  const noteHeight = baseNoteHeight * verticalZoomLevel; // ズームレベルに応じて高さを調整
   return totalKeys * noteHeight - (noteNumber - 21) * noteHeight + 15;
 };
 
 // Y座標からノート番号への変換関数
-const yToNoteNumber = (y: number): number => {
+const yToNoteNumber = (y: number, verticalZoomLevel: number = 1): number => {
   const totalKeys = octaves.length * keys.length;
-  const noteHeight = 30;
+  const baseNoteHeight = 30;
+  const noteHeight = baseNoteHeight * verticalZoomLevel;
   return Math.round(totalKeys - (y - 15) / noteHeight + 21);
 };
 
@@ -47,7 +51,9 @@ export const PitchEditor = ({
   setSelectedTrack,
   onTimeLineClick,
   isEditing,
-  timeScale
+  timeScale,
+  verticalZoomLevel,
+  regenerate
 }: PitchEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -94,7 +100,7 @@ export const PitchEditor = ({
 
     const sampleRate = 31.25;
     const timeIndex = Math.floor((x / timeScale) * sampleRate);
-    const noteNumber = yToNoteNumber(y);
+    const noteNumber = yToNoteNumber(y, verticalZoomLevel);
     const newHz = noteNumberToHz(noteNumber);
 
     if (timeIndex >= 0 && timeIndex < selectedTrack.features.pitch.length) {
@@ -125,6 +131,7 @@ export const PitchEditor = ({
     setDragStartPoint(null);
     setDragPoints([]);
     setTempPitch(null);
+    regenerate();
   };
 
   // ピッチデータを描画する関数
@@ -139,7 +146,7 @@ export const PitchEditor = ({
       if (hz > 0) {
         const noteNumber = hzToNoteNumber(hz);
         const x = (index / sampleRate) * timeScale;
-        const y = noteNumberToY(noteNumber);
+        const y = noteNumberToY(noteNumber, verticalZoomLevel);
         points.push({ x, y });
       }
     });
@@ -233,10 +240,10 @@ export const PitchEditor = ({
             position: 'sticky',
             left: 0,
             zIndex: 1,
-            height: octaves.length * keys.length * 30,
+            height: octaves.length * keys.length * 30 * verticalZoomLevel,
           }}
         >
-          <PianoRollKeys />
+          <PianoRollKeys verticalZoomLevel={verticalZoomLevel} />
         </Box>
         {/* 右側：ピアノロール本体 */}
         <Box
@@ -246,7 +253,7 @@ export const PitchEditor = ({
             bgcolor: '#181818',
             position: 'relative',
             minWidth: 0,
-            height: octaves.length * keys.length * 30,
+            height: octaves.length * keys.length * 30 * verticalZoomLevel,
             overflowX: 'auto',
             '&::-webkit-scrollbar': {
               display: 'none',
@@ -288,10 +295,10 @@ export const PitchEditor = ({
                     key={`${key.note}${oct}`}
                     sx={{
                       position: 'absolute',
-                      top: (octaveIdx * keys.length + keyIdx) * 30,
+                      top: (octaveIdx * keys.length + keyIdx) * 30 * verticalZoomLevel,
                       left: 0,
                       width: '100%',
-                      height: 30,
+                      height: 30 * verticalZoomLevel,
                       bgcolor: key.isBlack ? 'rgba(34,34,34,0.7)' : 'rgba(255,255,255,0.07)',
                       border: '1px solid #333',
                     }}

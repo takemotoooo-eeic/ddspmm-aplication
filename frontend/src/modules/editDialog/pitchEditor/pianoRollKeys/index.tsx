@@ -17,7 +17,7 @@ export const keys = [
 
 export const octaves = [6, 5, 4, 3, 2, 1]; // 表示したいオクターブ
 
-export const PianoRollKeys = () => (
+export const PianoRollKeys = ({ verticalZoomLevel }: { verticalZoomLevel: number }) => (
   <Box sx={{ width: 75, height: '100%', display: 'flex', flexDirection: 'column' }}>
     <Box sx={{ flex: 1, overflowY: 'auto' }}>
       {octaves.map((oct) =>
@@ -25,7 +25,7 @@ export const PianoRollKeys = () => (
           <Box
             key={`${key.note}${oct}`}
             sx={{
-              height: 30,
+              height: 30 * verticalZoomLevel,
               flexShrink: 0,
               bgcolor: key.isBlack ? '#222' : '#fff',
               border: '1px solid #333',

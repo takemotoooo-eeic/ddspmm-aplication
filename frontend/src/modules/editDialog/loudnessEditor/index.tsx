@@ -12,21 +12,25 @@ interface LoudnessEditorProps {
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   isEditing: boolean;
   timeScale: number;
+  verticalZoomLevel: number;
+  regenerate: () => void;
 }
 
 // dBからY座標への変換関数
-const dbToY = (db: number): number => {
+const dbToY = (db: number, verticalZoomLevel: number = 1): number => {
   const minDb = -80;
   const maxDb = 0;
-  const height = 600;
+  const baseHeight = 600;
+  const height = baseHeight * verticalZoomLevel;
   return height - ((db - minDb) / (maxDb - minDb)) * height;
 };
 
 // Y座標からdBへの変換関数
-const yToDb = (y: number): number => {
+const yToDb = (y: number, verticalZoomLevel: number = 1): number => {
   const minDb = -80;
   const maxDb = 0;
-  const height = 600;
+  const baseHeight = 600;
+  const height = baseHeight * verticalZoomLevel;
   return minDb + ((height - y) / height) * (maxDb - minDb);
 };
 
@@ -38,14 +42,15 @@ export const LoudnessEditor = ({
   setSelectedTrack,
   onTimeLineClick,
   isEditing,
-  timeScale
+  timeScale,
+  verticalZoomLevel,
+  regenerate
 }: LoudnessEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragPoints, setDragPoints] = useState<{ x: number; y: number }[]>([]);
   const [tempLoudness, setTempLoudness] = useState<number[] | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1); // ズームレベル（1-10倍）
   const timelineRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +91,7 @@ export const LoudnessEditor = ({
 
     const sampleRate = 31.25;
     const timeIndex = Math.floor((x / timeScale) * sampleRate);
-    const newDb = yToDb(y);
+    const newDb = yToDb(y, verticalZoomLevel);
 
     if (timeIndex >= 0 && timeIndex < selectedTrack.features.loudness.length) {
       const newLoudness = [...tempLoudness];
@@ -116,6 +121,7 @@ export const LoudnessEditor = ({
     setDragStartPoint(null);
     setDragPoints([]);
     setTempLoudness(null);
+    regenerate();
   };
 
   // ラウドネスデータを描画する関数
@@ -128,7 +134,7 @@ export const LoudnessEditor = ({
 
     loudnessData.forEach((db: number, index: number) => {
       const x = (index / sampleRate) * timeScale;
-      const y = dbToY(db);
+      const y = dbToY(db, verticalZoomLevel);
       points.push({ x, y });
     });
 
@@ -166,7 +172,7 @@ export const LoudnessEditor = ({
           position: 'sticky',
           left: 0,
           zIndex: 1,
-          height: '100%',
+          height: 600 * verticalZoomLevel,
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -261,7 +267,7 @@ export const LoudnessEditor = ({
             bgcolor: '#181818',
             position: 'relative',
             minWidth: 0,
-            height: '750px',
+            height: 600 * verticalZoomLevel,
             overflowX: 'auto',
             overflowY: 'auto',
             '&::-webkit-scrollbar': {
