@@ -24,6 +24,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   const [isEditing, setIsEditing] = useState(false);
   const [height, setHeight] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
+  const [verticalZoomLevel, setVerticalZoomLevel] = useState(1);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
@@ -164,8 +165,8 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <ToggleButton value="pitch">Pitch</ToggleButton>
           <ToggleButton value="loudness">Loudness</ToggleButton>
         </ToggleButtonGroup>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Box sx={{ color: '#fff', fontSize: '12px', mr: 2, minWidth: '60px' }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mr: 2 }}>
+          <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
             H Zoom: {zoomLevel.toFixed(1)}x
           </Box>
           <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
@@ -174,6 +175,37 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
               onChange={(_, value) => setZoomLevel(value as number)}
               min={0.5}
               max={5}
+              step={0.1}
+              sx={{
+                color: '#646cff',
+                '& .MuiSlider-thumb': {
+                  bgcolor: '#646cff',
+                  width: '16px',
+                  height: '16px',
+                  '&:hover': {
+                    width: '20px',
+                    height: '20px',
+                  },
+                },
+                '& .MuiSlider-track': {
+                  bgcolor: '#646cff',
+                  height: '4px',
+                },
+                '& .MuiSlider-rail': {
+                  height: '4px',
+                },
+              }}
+            />
+          </Box>
+          <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
+            V Zoom: {verticalZoomLevel.toFixed(1)}x
+          </Box>
+          <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
+            <Slider
+              value={verticalZoomLevel}
+              onChange={(_, value) => setVerticalZoomLevel(value as number)}
+              min={0.5}
+              max={2}
               step={0.1}
               sx={{
                 color: '#646cff',
@@ -210,20 +242,6 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           >
             Edit
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleRegenerate}
-            sx={{
-              bgcolor: '#646cff',
-              '&:hover': {
-                bgcolor: '#646cff',
-              },
-              height: '32px',
-              minWidth: '120px',
-            }}
-          >
-            REGENERATE
-          </Button>
           <IconButton
             onClick={() => {
               setIsEditing(false);
@@ -255,6 +273,8 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             onTimeLineClick={onTimeLineClick}
             isEditing={isEditing}
             timeScale={timeScale}
+            verticalZoomLevel={verticalZoomLevel}
+            regenerate={handleRegenerate}
           />
         )}
         {editMode === 'loudness' && (
@@ -267,6 +287,8 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             onTimeLineClick={onTimeLineClick}
             isEditing={isEditing}
             timeScale={timeScale}
+            verticalZoomLevel={verticalZoomLevel}
+            regenerate={handleRegenerate}
           />
         )}
       </Box>
