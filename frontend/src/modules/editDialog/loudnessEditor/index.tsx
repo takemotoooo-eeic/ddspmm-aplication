@@ -13,7 +13,6 @@ interface LoudnessEditorProps {
   isEditing: boolean;
   timeScale: number;
   verticalZoomLevel: number;
-  regenerate: () => void;
 }
 
 // dBからY座標への変換関数
@@ -44,7 +43,6 @@ export const LoudnessEditor = ({
   isEditing,
   timeScale,
   verticalZoomLevel,
-  regenerate
 }: LoudnessEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -121,7 +119,6 @@ export const LoudnessEditor = ({
     setDragStartPoint(null);
     setDragPoints([]);
     setTempLoudness(null);
-    regenerate();
   };
 
   // ラウドネスデータを描画する関数

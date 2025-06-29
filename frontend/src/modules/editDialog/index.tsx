@@ -242,6 +242,20 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           >
             Edit
           </Button>
+          <Button
+            variant="contained"
+            onClick={handleRegenerate}
+            sx={{
+              bgcolor: '#646cff',
+              '&:hover': {
+                bgcolor: '#646cff',
+              },
+              height: '32px',
+              minWidth: '120px',
+            }}
+          >
+            REGENERATE
+          </Button>
           <IconButton
             onClick={() => {
               setIsEditing(false);
@@ -274,7 +288,6 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             isEditing={isEditing}
             timeScale={timeScale}
             verticalZoomLevel={verticalZoomLevel}
-            regenerate={handleRegenerate}
           />
         )}
         {editMode === 'loudness' && (
@@ -288,7 +301,6 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
             isEditing={isEditing}
             timeScale={timeScale}
             verticalZoomLevel={verticalZoomLevel}
-            regenerate={handleRegenerate}
           />
         )}
       </Box>

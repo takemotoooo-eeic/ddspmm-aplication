@@ -14,7 +14,6 @@ interface PitchEditorProps {
   isEditing: boolean;
   timeScale: number;
   verticalZoomLevel: number;
-  regenerate: () => void;
 }
 
 // Hzからノート番号への変換関数
@@ -53,7 +52,6 @@ export const PitchEditor = ({
   isEditing,
   timeScale,
   verticalZoomLevel,
-  regenerate
 }: PitchEditorProps) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -131,7 +129,6 @@ export const PitchEditor = ({
     setDragStartPoint(null);
     setDragPoints([]);
     setTempPitch(null);
-    regenerate();
   };
 
   // ピッチデータを描画する関数
