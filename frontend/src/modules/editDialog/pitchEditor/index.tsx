@@ -34,7 +34,7 @@ const yToNoteNumber = (y: number, verticalZoomLevel: number = 1): number => {
   const totalKeys = octaves.length * keys.length;
   const baseNoteHeight = 30;
   const noteHeight = baseNoteHeight * verticalZoomLevel;
-  return Math.round(totalKeys - (y - 15) / noteHeight + 21);
+  return totalKeys - (y - 15) / noteHeight + 21;
 };
 
 // ノート番号からHzへの変換関数

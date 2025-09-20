@@ -1,5 +1,5 @@
 import CloseIcon from '@mui/icons-material/Close';
-import { Box, Button, IconButton, Slider, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
 import { DDSPGenerateParams } from '../../orval/models/backend-api';
@@ -148,13 +148,17 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           value={editMode}
           exclusive
           onChange={handleEditModeChange}
-          size="small"
+          size="medium"
           sx={{
             '& .MuiToggleButton-root': {
               color: '#fff',
               borderColor: '#333',
               height: '32px',
-              minWidth: '80px',
+              minWidth: '120px',
+              fontSize: '1.2rem',
+              '& .MuiSvgIcon-root': {
+                fontSize: '1.2rem',
+              },
               '&.Mui-selected': {
                 bgcolor: '#333',
                 color: '#fff',
@@ -166,7 +170,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <ToggleButton value="loudness">Loudness</ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mr: 2 }}>
-          <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
+          {/* <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
             H Zoom: {zoomLevel.toFixed(1)}x
           </Box>
           <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
@@ -227,17 +231,22 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
                 },
               }}
             />
-          </Box>
+          </Box> */}
           <Button
             variant="contained"
             onClick={() => setIsEditing(!isEditing)}
+            size="medium"
             sx={{
               bgcolor: isEditing ? '#646cff' : '#333',
               '&:hover': {
                 bgcolor: isEditing ? '#535bf2' : '#444',
               },
               height: '32px',
-              width: '80px',
+              width: '120px',
+              fontSize: '1.2rem',
+              '& .MuiSvgIcon-root': {
+                fontSize: '1.2rem',
+              },
             }}
           >
             Edit
@@ -245,13 +254,18 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <Button
             variant="contained"
             onClick={handleRegenerate}
+            size="medium"
             sx={{
               bgcolor: '#646cff',
               '&:hover': {
                 bgcolor: '#646cff',
               },
               height: '32px',
-              minWidth: '120px',
+              minWidth: '200px',
+              fontSize: '1.2rem',
+              '& .MuiSvgIcon-root': {
+                fontSize: '1.2rem',
+              },
             }}
           >
             REGENERATE

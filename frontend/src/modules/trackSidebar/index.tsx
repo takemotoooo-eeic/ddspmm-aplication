@@ -34,7 +34,7 @@ export const TrackSidebar = ({
     }}
     onClick={onClick}
   >
-    <Typography sx={{ color: '#fff', minWidth: 120, alignItems: 'center', justifyContent: 'center' }}>{track.name}</Typography>
+    <Typography variant="h6" sx={{ color: '#fff', minWidth: 120, alignItems: 'center', justifyContent: 'center' }}>{track.name}</Typography>
     <Box sx={{ display: 'flex', gap: 1, ml: 'auto', alignItems: 'center' }}>
       <VolumeSlider
         value={track.volume * 128}

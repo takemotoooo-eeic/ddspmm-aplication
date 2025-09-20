@@ -64,14 +64,14 @@ export const WaveformDisplay = ({
 
       // 波形を描画
       ctx.beginPath();
-      ctx.strokeStyle = '#000000'; // 波形を黒色に
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff'; // 波形を白色に
+      ctx.lineWidth = 2; // 線を太くする
 
       for (let i = 0; i < width; i++) {
         let min = 1.0;
         let max = -1.0;
         for (let j = 0; j < step; j++) {
-          const datum = channelData[i * step + j];
+          const datum = channelData[i * step + j] * 5;
           if (datum < min) min = datum;
           if (datum > max) max = datum;
         }
