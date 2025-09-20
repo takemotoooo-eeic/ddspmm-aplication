@@ -11,8 +11,14 @@ export const StopButton = ({ onClick, disabled }: Props) => {
     <IconButton
       aria-label="stop"
       onClick={onClick}
-      style={{ width: 26, height: 26 }}
+      size="large"
       disabled={disabled}
+      sx={{
+        fontSize: '2rem',
+        '& .MuiSvgIcon-root': {
+          fontSize: '2rem',
+        },
+      }}
     >
       <StopIcon />
     </IconButton>

@@ -11,8 +11,12 @@ export const MuteButton = ({ isMuted, onClick }: MuteButtonProps) => {
   return (
     <IconButton
       onClick={onClick}
-      size="small"
+      size="large"
       sx={{
+        fontSize: '2rem',
+        '& .MuiSvgIcon-root': {
+          fontSize: '2rem',
+        },
         color: isMuted ? '#ff4444' : '#fff',
         '&:hover': {
           color: isMuted ? '#ff6666' : '#ccc',

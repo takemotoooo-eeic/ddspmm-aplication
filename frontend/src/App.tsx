@@ -297,11 +297,11 @@ export default function App() {
         }}
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Typography variant="h6">DDSP Editor</Typography>
+          <Typography variant="h5">DDSP Editor</Typography>
 
           {/* 再生コントロール */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body1" sx={{ minWidth: '60px' }}>
+            <Typography variant="h5" sx={{ minWidth: '60px' }}>
               {formatTime(currentTime)}
             </Typography>
             <StartButton
