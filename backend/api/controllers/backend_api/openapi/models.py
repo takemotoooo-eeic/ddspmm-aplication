@@ -1,11 +1,19 @@
 from api.controllers.common import CustomBaseModel
 from typing import Generator
 
+
+class Note(CustomBaseModel):
+    start: float
+    frequency: float
+    duration: float
+
+
 class Feature(CustomBaseModel):
     instrument_name: str
     pitch: list[float]
     loudness: list[float]
     z_feature: list[list[float]]
+    notes: list[Note]
 
 
 class Features(CustomBaseModel):

@@ -9,12 +9,14 @@ import {
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { AddButton } from './components/buttons/ImportButton';
+import { LoadButton } from './components/buttons/LoadButton';
 import { RefreshButton } from './components/buttons/refreshButton';
 import { StartButton } from './components/buttons/StartButton';
 import { StopButton } from './components/buttons/StopButton';
 import { useDisclosure } from './hooks/useDisclosure';
 import { EditDialog } from './modules/editDialog';
 import { ImportTrackDialog } from './modules/importTrackDialog';
+import { LoadTrackDialog } from './modules/loadTrackDialog';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
@@ -39,6 +41,7 @@ const theme = createTheme({
 export default function App() {
   const [wavFile, setWavFile] = useState<File | null>(null);
   const [midFile, setMidFile] = useState<File | null>(null);
+  const [jsonlFile, setJsonlFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -87,6 +90,12 @@ export default function App() {
     isOpen: isOpenImportTracksDialog,
     open: openImportTracksDialog,
     close: closeImportTracksDialog,
+  } = useDisclosure({});
+
+  const {
+    isOpen: isOpenLoadParamsDialog,
+    open: openLoadParamsDialog,
+    close: closeLoadParamsDialog,
   } = useDisclosure({});
 
   // 時間をフォーマットする関数
@@ -207,7 +216,7 @@ export default function App() {
     form.append('midi_file', midFile);
     form.append('epochs', epochs.toString());
     form.append('lr', lr.toString());
-    let features: { features: Array<{ instrument_name: string; pitch: number[]; loudness: number[]; z_feature: number[][] }> } = { features: [] };
+    let features: { features: Array<{ instrument_name: string; pitch: number[]; loudness: number[]; z_feature: number[][]; notes: Array<{ start: number; frequency: number; duration: number }> }> } = { features: [] };
     try {
       const resp = await fetch('/backend-api/ddsp/train', {
         method: 'POST',
@@ -266,6 +275,47 @@ export default function App() {
     closeImportTracksDialog();
   };
 
+  const handleLoadParams = async () => {
+    if (!jsonlFile) return;
+    // jsonlファイルを読み込んで、DDSPのパラメータを読み込み、generateAudioTriggerを呼び出して、wavファイルを生成する
+    return new Promise<void>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const text = e.target?.result as string;
+          const lines = text.split('\n');
+          for (const line of lines) {
+            if (!line) continue;
+            const data = JSON.parse(line);
+            const body: DDSPGenerateParams = {
+              z_feature: data.z_feature,
+              loudness: data.loudness,
+              pitch: data.pitch,
+            };
+            const response = await generateAudioTrigger(body);
+            const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
+            setTracks(prev => [...prev, {
+              id: `track-${Date.now()}-${Math.random()}`,
+              name: data.instrument_name,
+              wavData: wavBlob,
+              features: data,
+              muted: false,
+              volume: 1.0,
+            }]);
+          }
+          // すべてのオーディオ生成が完了してからダイアログを閉じる
+          setJsonlFile(null);
+          closeLoadParamsDialog();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(jsonlFile);
+    });
+  };
+
   // タイムラインクリック時の処理
   const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>, isEditDialog: boolean = false) => {
     if (!tracks.length) return;
@@ -319,6 +369,7 @@ export default function App() {
               setTracks([]);
               setSelectedTrack(null);
             }} />
+            <LoadButton disabled={tracks.length !== 0} onClick={openLoadParamsDialog} />
             <AddButton disabled={tracks.length !== 0} onClick={openImportTracksDialog} />
           </Box>
         </Toolbar>
@@ -412,6 +463,17 @@ export default function App() {
             onImport={handleImportTracks}
             learnData={learnData}
             setLearnData={setLearnData}
+          />
+        )
+      }
+      {
+        isOpenLoadParamsDialog && (
+          <LoadTrackDialog
+            open={isOpenLoadParamsDialog}
+            onClose={closeLoadParamsDialog}
+            jsonlFile={jsonlFile}
+            setJsonlFile={setJsonlFile}
+            onLoad={handleLoadParams}
           />
         )
       }

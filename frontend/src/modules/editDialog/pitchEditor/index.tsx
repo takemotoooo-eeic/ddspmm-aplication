@@ -157,7 +157,6 @@ export const PitchEditor = ({
           width: '100%',
           height: '100%',
           pointerEvents: 'none',
-          zIndex: 1,
         }}
       >
         <polyline
@@ -166,6 +165,47 @@ export const PitchEditor = ({
           stroke="#646cff"
           strokeWidth="2"
         />
+      </svg>
+    );
+  };
+
+  // ノートを描画する関数
+  const renderNotes = () => {
+    if (!selectedTrack || !selectedTrack.features.notes) return null;
+
+    const baseNoteHeight = 30;
+    const noteHeight = baseNoteHeight * verticalZoomLevel;
+
+    return (
+      <svg
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      >
+        {selectedTrack.features.notes.map((note, index) => {
+          const noteNumber = hzToNoteNumber(note.frequency);
+          const y = noteNumberToY(noteNumber, verticalZoomLevel) - noteHeight / 2;
+          const x = note.start * timeScale;
+          const width = note.duration * timeScale;
+
+          return (
+            <rect
+              key={index}
+              x={x}
+              y={y}
+              width={width}
+              height={noteHeight}
+              fill="rgba(255, 215, 0, 0.3)"
+              stroke="rgba(255, 215, 0, 0.6)"
+              strokeWidth="1"
+            />
+          );
+        })}
       </svg>
     );
   };
@@ -303,6 +343,7 @@ export const PitchEditor = ({
                 ))
               )}
             </Box>
+            {renderNotes()}
             {renderPitchLine()}
           </Box>
         </Box>

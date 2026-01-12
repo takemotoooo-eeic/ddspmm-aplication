@@ -1,6 +1,7 @@
 import io
 import json
 from typing import Generator
+import os
 
 import numpy as np
 import soundfile
@@ -52,7 +53,7 @@ class DDSPModel:
     ):
         self.logger = get_logger()
         model_config: ModelConfig = ModelConfig.from_config_path(PRETRAIN_CONFIG_PATH)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
         self.logger.info(f"device: {self.device}")
         self.model: DDSP = load_model(MODEL_WEIGHTS_PATH, self.device, model_config)
         self.logger.info(f"finished load_model")
@@ -133,6 +134,7 @@ class DDSPModel:
         instrument_names: list[str],
         epochs: int,
         lr: float,
+        aligned_midi_list: list[AlignedMidi],
     ) -> models.TrainDDSPOutputStream:
         optimizer = torch.optim.Adam(
             [z_features, pitches, loudnesses], lr=lr
@@ -195,6 +197,29 @@ class DDSPModel:
 
         loudnesses = loudnesses * std_loudness + mean_loudness
 
+        feature_path = "api/models/ddsp/features/Maria"
+        os.makedirs(feature_path, exist_ok=True)
+        with open(f"{feature_path}/features.jsonl", "w") as f:
+            for i in range(num_instruments):
+                json.dump(
+                        {
+                            "instrument_name": instrument_names[i],
+                            "pitch": pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
+                            "loudness": loudnesses[i].reshape(-1).detach().cpu().numpy().tolist(),
+                            "z_feature": z_features[i].reshape(-1,16).detach().cpu().numpy().tolist(),
+                            "notes": [
+                                {
+                                    "start": note.start,
+                                    "frequency": note.frequency,
+                                    "duration": note.duration,
+                                }
+                                for note in aligned_midi_list[i].notes
+                            ],
+                        },
+                    f,
+                )
+                f.write("\n")
+
         yield models.Features(
             features=[
                 models.Feature(
@@ -202,6 +227,14 @@ class DDSPModel:
                     z_feature=z_features[i].reshape(-1,16).detach().cpu().numpy().tolist(),
                     pitch=pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
                     loudness=loudnesses[i].reshape(-1).detach().cpu().numpy().tolist(),
+                    notes=[
+                        models.Note(
+                            start=note.start,
+                            frequency=note.frequency,
+                            duration=note.duration,
+                        )
+                        for note in aligned_midi_list[i].notes
+                    ],
                 )
                 for i in range(num_instruments)
             ],
@@ -250,6 +283,7 @@ class DDSPModel:
             instrument_names=train_input.instrument_names,
             epochs=train_input.epochs,
             lr=train_input.lr,
+            aligned_midi_list=train_input.midi,
         )
 
     def generate(

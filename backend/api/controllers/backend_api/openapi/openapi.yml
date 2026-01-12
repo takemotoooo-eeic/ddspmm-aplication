@@ -2,14 +2,19 @@ components:
   schemas:
     Body_train_ddsp_ddsp_train_post:
       properties:
+        epochs:
+          description: エポック数
+          title: Epochs
+          type: integer
+        lr:
+          description: 学習率
+          title: Lr
+          type: number
         midi_file:
           description: MIDIファイル
           format: binary
           title: Midi File
           type: string
-        params:
-          $ref: '#/components/schemas/TrainDDSPParams'
-          description: パラメータ
         wav_file:
           description: WAVファイル
           format: binary
@@ -18,7 +23,8 @@ components:
       required:
       - wav_file
       - midi_file
-      - params
+      - epochs
+      - lr
       title: Body_train_ddsp_ddsp_train_post
       type: object
     DDSPGenerateParams:
@@ -56,6 +62,11 @@ components:
             type: number
           title: Loudness
           type: array
+        notes:
+          items:
+            $ref: '#/components/schemas/Note'
+          title: Notes
+          type: array
         pitch:
           items:
             type: number
@@ -73,6 +84,7 @@ components:
       - pitch
       - loudness
       - z_feature
+      - notes
       title: Feature
       type: object
     Features:
@@ -95,18 +107,22 @@ components:
           type: array
       title: HTTPValidationError
       type: object
-    TrainDDSPParams:
+    Note:
       properties:
-        epochs:
-          title: Epochs
-          type: integer
-        lr:
-          title: Lr
+        duration:
+          title: Duration
+          type: number
+        frequency:
+          title: Frequency
+          type: number
+        start:
+          title: Start
           type: number
       required:
-      - epochs
-      - lr
-      title: TrainDDSPParams
+      - start
+      - frequency
+      - duration
+      title: Note
       type: object
     ValidationError:
       properties:
