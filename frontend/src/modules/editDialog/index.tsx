@@ -57,16 +57,16 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       const blockSize = 512;
       const pitchLength = selectedTrack.features.pitch.length;
       const signalLength = pitchLength * blockSize;
-      
+
       const diffusionParams: DiffusionGenerateParams = {
         notes: selectedTrack.features.notes,
         instrument_name: selectedTrack.instrument,
         signal_length: signalLength,
       };
-      
+
       // diffusion/generateで合成パラメータを生成
       const generatedParams = await generateParamsFromDiffusionTrigger(diffusionParams);
-      
+
       // 生成したパラメータでddsp/generateで波形を生成
       const audioBody: DDSPGenerateParams = {
         pitch: generatedParams.pitch,
@@ -75,7 +75,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       };
       const response = await generateAudioTrigger(audioBody);
       const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
-      
+
       // 生成したパラメータをfeaturesに反映
       const newTracks = tracks.map(track =>
         track.id === selectedTrack.id
@@ -92,7 +92,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           : track
       );
       setTracks(newTracks);
-      
+
       // selectedTrackも更新して表示を反映
       const updatedTrack = newTracks.find(track => track.id === selectedTrack.id);
       if (updatedTrack) {

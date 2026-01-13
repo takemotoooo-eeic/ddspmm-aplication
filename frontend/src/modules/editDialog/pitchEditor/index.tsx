@@ -58,6 +58,9 @@ export const PitchEditor = ({
   const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragPoints, setDragPoints] = useState<{ x: number; y: number }[]>([]);
   const [tempPitch, setTempPitch] = useState<number[] | null>(null);
+  const [draggedNoteIndex, setDraggedNoteIndex] = useState<number | null>(null);
+  const [noteDragStart, setNoteDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [tempNotes, setTempNotes] = useState<Array<{ start: number; frequency: number; duration: number }> | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const pianoRollRef = useRef<HTMLDivElement>(null);
 
@@ -73,9 +76,25 @@ export const PitchEditor = ({
     }
   };
 
-  // マウスイベントハンドラー
+  // ノート上でのマウスダウン（ノートドラッグ開始）
+  const handleNoteMouseDown = (event: React.MouseEvent<SVGRectElement>, noteIndex: number) => {
+    if (!isEditing || !selectedTrack) return;
+    event.stopPropagation();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left + scrollPosition;
+    const y = event.clientY - rect.top;
+
+    setDraggedNoteIndex(noteIndex);
+    setNoteDragStart({ x, y });
+    setTempNotes([...selectedTrack.features.notes]);
+  };
+
+  // マウスイベントハンドラー（ピッチ線編集用）
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isEditing || !selectedTrack) return;
+    // ノートのドラッグ中は無視
+    if (draggedNoteIndex !== null) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left + scrollPosition;
@@ -87,7 +106,35 @@ export const PitchEditor = ({
     setTempPitch([...selectedTrack.features.pitch]);
   };
 
+  // ノートドラッグ中のマウスムーブ
+  const handleNoteMouseMove = (event: React.MouseEvent<HTMLDivElement | SVGElement>) => {
+    if (draggedNoteIndex === null || !noteDragStart || !selectedTrack || !isEditing || !tempNotes || !pianoRollRef.current) return;
+
+    const rect = pianoRollRef.current.getBoundingClientRect();
+    const x = event.clientX - rect.left + scrollPosition;
+    const y = event.clientY - rect.top;
+
+    const note = tempNotes[draggedNoteIndex];
+    const noteNumber = yToNoteNumber(y, verticalZoomLevel);
+    const newFrequency = noteNumberToHz(noteNumber);
+    const newStart = Math.max(0, (x - note.duration * timeScale / 2) / timeScale);
+
+    const updatedNotes = [...tempNotes];
+    updatedNotes[draggedNoteIndex] = {
+      ...note,
+      start: newStart,
+      frequency: newFrequency,
+    };
+    setTempNotes(updatedNotes);
+  };
+
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    // ノートのドラッグ中はノートドラッグ処理を実行
+    if (draggedNoteIndex !== null) {
+      handleNoteMouseMove(event);
+      return;
+    }
+
     if (!isDragging || !dragStartPoint || !selectedTrack || !isEditing || !tempPitch) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -108,7 +155,36 @@ export const PitchEditor = ({
     }
   };
 
+  // ノートドラッグ終了
+  const handleNoteMouseUp = () => {
+    if (draggedNoteIndex === null || !selectedTrack || !isEditing || !tempNotes) return;
+
+    const updatedTrack = {
+      ...selectedTrack,
+      features: {
+        ...selectedTrack.features,
+        notes: tempNotes
+      }
+    };
+
+    const updatedTracks = tracks.map(track =>
+      track.id === selectedTrack.id ? updatedTrack : track
+    );
+
+    setTracks(updatedTracks);
+    setSelectedTrack(updatedTrack);
+    setDraggedNoteIndex(null);
+    setNoteDragStart(null);
+    setTempNotes(null);
+  };
+
   const handleMouseUp = () => {
+    // ノートのドラッグ終了を優先
+    if (draggedNoteIndex !== null) {
+      handleNoteMouseUp();
+      return;
+    }
+
     if (!isDragging || !selectedTrack || !isEditing || !tempPitch) return;
 
     const updatedTrack = {
@@ -175,6 +251,7 @@ export const PitchEditor = ({
 
     const baseNoteHeight = 30;
     const noteHeight = baseNoteHeight * verticalZoomLevel;
+    const notesToRender = tempNotes || selectedTrack.features.notes;
 
     return (
       <svg
@@ -184,14 +261,23 @@ export const PitchEditor = ({
           left: 0,
           width: '100%',
           height: '100%',
-          pointerEvents: 'none',
+          pointerEvents: isEditing ? 'all' : 'none',
+          zIndex: 1,
         }}
+        onMouseMove={(e) => {
+          if (draggedNoteIndex !== null) {
+            handleNoteMouseMove(e as any);
+          }
+        }}
+        onMouseUp={handleNoteMouseUp}
+        onMouseLeave={handleNoteMouseUp}
       >
-        {selectedTrack.features.notes.map((note, index) => {
+        {notesToRender.map((note, index) => {
           const noteNumber = hzToNoteNumber(note.frequency);
           const y = noteNumberToY(noteNumber, verticalZoomLevel) - noteHeight / 2;
           const x = note.start * timeScale;
           const width = note.duration * timeScale;
+          const isDragged = draggedNoteIndex === index;
 
           return (
             <rect
@@ -200,9 +286,11 @@ export const PitchEditor = ({
               y={y}
               width={width}
               height={noteHeight}
-              fill="rgba(255, 215, 0, 0.3)"
-              stroke="rgba(255, 215, 0, 0.6)"
-              strokeWidth="1"
+              fill={isDragged ? "rgba(255, 215, 0, 0.5)" : "rgba(255, 215, 0, 0.3)"}
+              stroke={isDragged ? "rgba(255, 215, 0, 0.9)" : "rgba(255, 215, 0, 0.6)"}
+              strokeWidth={isDragged ? "2" : "1"}
+              cursor={isEditing ? "move" : "default"}
+              onMouseDown={(e) => handleNoteMouseDown(e, index)}
             />
           );
         })}
