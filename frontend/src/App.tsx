@@ -259,6 +259,7 @@ export default function App() {
         newTracks.push({
           id: `track-${Date.now()}-${Math.random()}`,
           name: feature.instrument_name,
+          instrument: feature.instrument_name,
           wavData: wavBlob,
           features: feature,
           muted: false,
@@ -297,6 +298,7 @@ export default function App() {
             setTracks(prev => [...prev, {
               id: `track-${Date.now()}-${Math.random()}`,
               name: data.instrument_name,
+              instrument: data.instrument_name,
               wavData: wavBlob,
               features: data,
               muted: false,

@@ -224,6 +224,7 @@ class DiffusionModel:
             )
         
         instrument_id = self.instrument_mapping[params.instrument_name]
+        print(params.instrument_name, instrument_id)
         
         sampling_rate = DEFAULT_SAMPLING_RATE
         block_size = DEFAULT_BLOCK_SIZE

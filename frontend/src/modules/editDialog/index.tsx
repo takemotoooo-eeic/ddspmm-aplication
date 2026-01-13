@@ -1,11 +1,15 @@
 import CloseIcon from '@mui/icons-material/Close';
-import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Box, Button, CircularProgress, FormControl, IconButton, MenuItem, Select, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useGenerateAudioFromDdsp, useGenerateParamsFromDiffusion } from '../../orval/backend-api';
 import { DDSPGenerateParams, DiffusionGenerateParams } from '../../orval/models/backend-api';
 import { TrackData } from '../../types/trackData';
 import { LoudnessEditor } from './loudnessEditor';
 import { PitchEditor } from './pitchEditor';
+
+// instrument_mappingのキー（楽器名）
+const INSTRUMENTS = ['va', 'vn', 'vc', 'fl', 'cl', 'ob'] as const;
+type Instrument = typeof INSTRUMENTS[number];
 
 interface EditDialogProps {
   currentTime: number;
@@ -25,6 +29,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   const [height, setHeight] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
   const [verticalZoomLevel, setVerticalZoomLevel] = useState(1);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
@@ -46,21 +51,22 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       return;
     }
 
+    setIsRegenerating(true);
     try {
       // signal_lengthを計算（pitchの長さから逆算）
       const blockSize = 512;
       const pitchLength = selectedTrack.features.pitch.length;
       const signalLength = pitchLength * blockSize;
-
+      
       const diffusionParams: DiffusionGenerateParams = {
         notes: selectedTrack.features.notes,
-        instrument_name: selectedTrack.name,
+        instrument_name: selectedTrack.instrument,
         signal_length: signalLength,
       };
-
+      
       // diffusion/generateで合成パラメータを生成
       const generatedParams = await generateParamsFromDiffusionTrigger(diffusionParams);
-
+      
       // 生成したパラメータでddsp/generateで波形を生成
       const audioBody: DDSPGenerateParams = {
         pitch: generatedParams.pitch,
@@ -69,7 +75,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       };
       const response = await generateAudioTrigger(audioBody);
       const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
-
+      
       // 生成したパラメータをfeaturesに反映
       const newTracks = tracks.map(track =>
         track.id === selectedTrack.id
@@ -86,7 +92,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           : track
       );
       setTracks(newTracks);
-
+      
       // selectedTrackも更新して表示を反映
       const updatedTrack = newTracks.find(track => track.id === selectedTrack.id);
       if (updatedTrack) {
@@ -94,6 +100,8 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
       }
     } catch (error) {
       console.error('Error generating audio:', error);
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -213,68 +221,67 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <ToggleButton value="loudness">Loudness</ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mr: 2 }}>
-          {/* <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
-            H Zoom: {zoomLevel.toFixed(1)}x
-          </Box>
-          <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
-            <Slider
-              value={zoomLevel}
-              onChange={(_, value) => setZoomLevel(value as number)}
-              min={0.5}
-              max={5}
-              step={0.1}
+          {/* 楽器選択 */}
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <Select
+              value={selectedTrack.instrument}
+              onChange={(e) => {
+                const newInstrument = e.target.value as Instrument;
+                const updatedTrack = {
+                  ...selectedTrack,
+                  instrument: newInstrument,
+                };
+                const updatedTracks = tracks.map(track =>
+                  track.id === selectedTrack.id ? updatedTrack : track
+                );
+                setTracks(updatedTracks);
+                setSelectedTrack(updatedTrack);
+              }}
               sx={{
-                color: '#646cff',
-                '& .MuiSlider-thumb': {
-                  bgcolor: '#646cff',
-                  width: '16px',
-                  height: '16px',
-                  '&:hover': {
-                    width: '20px',
-                    height: '20px',
-                  },
+                color: '#fff',
+                bgcolor: '#333',
+                height: '32px',
+                fontSize: '1.2rem',
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#555',
                 },
-                '& .MuiSlider-track': {
-                  bgcolor: '#646cff',
-                  height: '4px',
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#666',
                 },
-                '& .MuiSlider-rail': {
-                  height: '4px',
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#646cff',
+                },
+                '& .MuiSvgIcon-root': {
+                  color: '#fff',
                 },
               }}
-            />
-          </Box>
-          <Box sx={{ color: '#fff', fontSize: '12px', minWidth: '60px' }}>
-            V Zoom: {verticalZoomLevel.toFixed(1)}x
-          </Box>
-          <Box sx={{ minWidth: 80, maxWidth: 120, width: '100px' }}>
-            <Slider
-              value={verticalZoomLevel}
-              onChange={(_, value) => setVerticalZoomLevel(value as number)}
-              min={0.5}
-              max={2}
-              step={0.1}
-              sx={{
-                color: '#646cff',
-                '& .MuiSlider-thumb': {
-                  bgcolor: '#646cff',
-                  width: '16px',
-                  height: '16px',
-                  '&:hover': {
-                    width: '20px',
-                    height: '20px',
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: '#333',
+                    color: '#fff',
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        bgcolor: '#444',
+                      },
+                      '&.Mui-selected': {
+                        bgcolor: '#646cff',
+                        '&:hover': {
+                          bgcolor: '#535bf2',
+                        },
+                      },
+                    },
                   },
                 },
-                '& .MuiSlider-track': {
-                  bgcolor: '#646cff',
-                  height: '4px',
-                },
-                '& .MuiSlider-rail': {
-                  height: '4px',
-                },
               }}
-            />
-          </Box> */}
+            >
+              {INSTRUMENTS.map((instrument) => (
+                <MenuItem key={instrument} value={instrument}>
+                  {instrument.toUpperCase()}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Button
             variant="contained"
             onClick={() => setIsEditing(!isEditing)}
@@ -297,11 +304,16 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
           <Button
             variant="contained"
             onClick={handleRegenerate}
+            disabled={isRegenerating}
             size="medium"
             sx={{
               bgcolor: '#646cff',
               '&:hover': {
-                bgcolor: '#646cff',
+                bgcolor: isRegenerating ? '#646cff' : '#535bf2',
+              },
+              '&:disabled': {
+                bgcolor: '#333',
+                color: '#666',
               },
               height: '32px',
               minWidth: '200px',
@@ -311,7 +323,14 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
               },
             }}
           >
-            REGENERATE
+            {isRegenerating ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={16} sx={{ color: '#fff' }} />
+                REGENERATING...
+              </Box>
+            ) : (
+              'REGENERATE'
+            )}
           </Button>
           <IconButton
             onClick={() => {
