@@ -32,6 +32,7 @@ dependencies = [
   "fastapi>=0.115.12",
   "pydantic-settings>=2.9.1",
   "python-multipart>=0.0.20",
+  "diffusers>=0.36.0",
 ]
 
 [build-system]

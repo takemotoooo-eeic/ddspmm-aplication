@@ -44,7 +44,8 @@ def convert_midi_to_features(
             pitch_array[start_sample:end_sample] = pitch
 
     pitch_array = pitch_array[::block_size]
-    loudness[pitch_array == 0] = -60
+    loudness[pitch_array == 0] = -65
+    loudness[pitch_array != 0] = -45
 
     mask: torch.Tensor = torch.from_numpy(pitch_array).float().to(device)
     mask[mask != 0] = 1

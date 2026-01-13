@@ -20,7 +20,7 @@ from .load_model import load_model
 from api.controllers.backend_api.openapi import models
 from .model import DDSP, DDSP_Decoder, Z_Encoder
 
-MODEL_WEIGHTS_PATH = "api/models/ddsp/weights/best_model.pth"
+MODEL_WEIGHTS_PATH = "api/models/ddsp/weights/last_model.pth"
 PRETRAIN_CONFIG_PATH = "api/config/pretrain.config.yaml"
 PREPROCESS_CONFIG_PATH = "api/config/preprocess.config.yaml"
 TRAIN_CONFIG_PATH = "api/config/train.config.yaml"
@@ -147,51 +147,51 @@ class DDSPModel:
         loss_fn = Loss(self.device, loss_config, instrument_names_fixed)
         print(f"epochs: {epochs}")
         pbar = tqdm(range(epochs), desc="Training")
-        for epoch in pbar:
-            optimizer.zero_grad()
-            signals = []
-            for i in range(num_instruments):
-                signal, *_ = model(pitches[i], loudnesses[i], z_features[i])
-                signal = signal.squeeze(-1)
-                signals.append(signal)
+        # for epoch in pbar:
+        #     optimizer.zero_grad()
+        #     signals = []
+        #     for i in range(num_instruments):
+        #         signal, *_ = model(pitches[i], loudnesses[i], z_features[i])
+        #         signal = signal.squeeze(-1)
+        #         signals.append(signal)
 
-            signal_mix = torch.stack(signals)
-            signal_mix = signal_mix.sum(dim=0).squeeze(0)
+        #     signal_mix = torch.stack(signals)
+        #     signal_mix = signal_mix.sum(dim=0).squeeze(0)
 
-            loss_inputs = LossInputs.from_results(
-                loss_config=loss_config,
-                signal_pred=signal_mix,
-                signal_target=reference_audio,
-                loudness=loudnesses,
-                pitch=pitches,
-                z_feature=z_features,
-                instrument_num=num_instruments,
-            )
-            loss: torch.Tensor = loss_fn(loss_inputs)
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            pbar.set_postfix({"loss": loss.item()})
-            wandb.log({"loss": loss.item()}, step=epoch)
-            if (epoch + 1) % 100 == 0:
-                for i in range(num_instruments):
-                    wandb.log(
-                        {
-                            f"instrument_{i}/generated_audio": wandb.Audio(
-                                signals[i].reshape(-1).detach().cpu().numpy(),
-                                sample_rate=preprocess_config.sampling_rate,
-                            ),
-                        },
-                        step=epoch,
-                    )
+        #     loss_inputs = LossInputs.from_results(
+        #         loss_config=loss_config,
+        #         signal_pred=signal_mix,
+        #         signal_target=reference_audio,
+        #         loudness=loudnesses,
+        #         pitch=pitches,
+        #         z_feature=z_features,
+        #         instrument_num=num_instruments,
+        #     )
+        #     loss: torch.Tensor = loss_fn(loss_inputs)
+        #     loss.backward()
+        #     optimizer.step()
+        #     scheduler.step()
+        #     pbar.set_postfix({"loss": loss.item()})
+        #     wandb.log({"loss": loss.item()}, step=epoch)
+        #     if (epoch + 1) % 100 == 0:
+        #         for i in range(num_instruments):
+        #             wandb.log(
+        #                 {
+        #                     f"instrument_{i}/generated_audio": wandb.Audio(
+        #                         signals[i].reshape(-1).detach().cpu().numpy(),
+        #                         sample_rate=preprocess_config.sampling_rate,
+        #                     ),
+        #                 },
+        #                 step=epoch,
+        #             )
             
-            # 10エポックごとに進捗状況を返す
-            if (epoch + 1) % 10 == 0:
-                yield models.TrainingProgress(
-                    current_epoch=epoch + 1,
-                    total_epochs=epochs,
-                    loss=float(loss.item())
-                )
+        #     # 10エポックごとに進捗状況を返す
+        #     if (epoch + 1) % 10 == 0:
+        #         yield models.TrainingProgress(
+        #             current_epoch=epoch + 1,
+        #             total_epochs=epochs,
+        #             loss=float(loss.item())
+        #         )
         
         wandb.finish()
 

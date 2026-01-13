@@ -38,3 +38,9 @@ class TrainingProgress(CustomBaseModel):
 
 
 TrainDDSPOutputStream = Generator[TrainingProgress | Features, None, None]
+
+
+class DiffusionGenerateParams(CustomBaseModel):
+    notes: list[Note]
+    instrument_name: str
+    signal_length: int

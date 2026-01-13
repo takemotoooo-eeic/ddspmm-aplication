@@ -1,8 +1,8 @@
 import CloseIcon from '@mui/icons-material/Close';
 import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
-import { useGenerateAudioFromDdsp } from '../../orval/backend-api';
-import { DDSPGenerateParams } from '../../orval/models/backend-api';
+import { useGenerateAudioFromDdsp, useGenerateParamsFromDiffusion } from '../../orval/backend-api';
+import { DDSPGenerateParams, DiffusionGenerateParams } from '../../orval/models/backend-api';
 import { TrackData } from '../../types/trackData';
 import { LoudnessEditor } from './loudnessEditor';
 import { PitchEditor } from './pitchEditor';
@@ -28,6 +28,7 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
+  const { trigger: generateParamsFromDiffusionTrigger } = useGenerateParamsFromDiffusion();
 
   const handleEditModeChange = (
     event: React.MouseEvent<HTMLElement>,
@@ -39,19 +40,61 @@ export const EditDialog = ({ currentTime, selectedTrack, tracks, setTracks, setS
   };
 
   const handleRegenerate = async () => {
-    // TODO: 波形再生成のロジックを実装
-    console.log('波形を再生成します');
-    const body: DDSPGenerateParams = {
-      z_feature: selectedTrack.features.z_feature,
-      loudness: selectedTrack.features.loudness,
-      pitch: selectedTrack.features.pitch,
-    };
-    const response = await generateAudioTrigger(body);
-    const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
-    const newTracks = tracks.map(track =>
-      track.id === selectedTrack.id ? { ...track, wavData: wavBlob } : track
-    );
-    setTracks(newTracks);
+    // 現在の楽器のnote情報と楽器名から合成パラメータを生成（diffusion/generate）
+    if (!selectedTrack.features.notes || selectedTrack.features.notes.length === 0) {
+      console.error('Notes not found');
+      return;
+    }
+
+    try {
+      // signal_lengthを計算（pitchの長さから逆算）
+      const blockSize = 512;
+      const pitchLength = selectedTrack.features.pitch.length;
+      const signalLength = pitchLength * blockSize;
+
+      const diffusionParams: DiffusionGenerateParams = {
+        notes: selectedTrack.features.notes,
+        instrument_name: selectedTrack.name,
+        signal_length: signalLength,
+      };
+
+      // diffusion/generateで合成パラメータを生成
+      const generatedParams = await generateParamsFromDiffusionTrigger(diffusionParams);
+
+      // 生成したパラメータでddsp/generateで波形を生成
+      const audioBody: DDSPGenerateParams = {
+        pitch: generatedParams.pitch,
+        loudness: generatedParams.loudness,
+        z_feature: generatedParams.z_feature,
+      };
+      const response = await generateAudioTrigger(audioBody);
+      const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
+
+      // 生成したパラメータをfeaturesに反映
+      const newTracks = tracks.map(track =>
+        track.id === selectedTrack.id
+          ? {
+            ...track,
+            wavData: wavBlob,
+            features: {
+              ...track.features,
+              pitch: generatedParams.pitch,
+              loudness: generatedParams.loudness,
+              z_feature: generatedParams.z_feature,
+            }
+          }
+          : track
+      );
+      setTracks(newTracks);
+
+      // selectedTrackも更新して表示を反映
+      const updatedTrack = newTracks.find(track => track.id === selectedTrack.id);
+      if (updatedTrack) {
+        setSelectedTrack(updatedTrack);
+      }
+    } catch (error) {
+      console.error('Error generating audio:', error);
+    }
   };
 
   // リサイズハンドラーのマウスダウンイベント

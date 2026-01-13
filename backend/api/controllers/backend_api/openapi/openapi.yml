@@ -52,6 +52,26 @@ components:
       - z_feature
       title: DDSPGenerateParams
       type: object
+    DiffusionGenerateParams:
+      properties:
+        instrument_name:
+          title: Instrument Name
+          type: string
+        notes:
+          items:
+            $ref: '#/components/schemas/Note'
+          title: Notes
+          type: array
+        signal_length:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Signal Length
+      required:
+      - notes
+      - instrument_name
+      title: DiffusionGenerateParams
+      type: object
     Feature:
       properties:
         instrument_name:
@@ -197,5 +217,29 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Train Ddsp
+  /diffusion/generate:
+    post:
+      description: 音符列と楽器IDから合成パラメータを生成（Diffusionモデルを使用）
+      operationId: GenerateParamsFromDiffusion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiffusionGenerateParams'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DDSPGenerateParams'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Generate Params From Diffusion
 servers:
 - url: http://localhost:8888/backend-api

@@ -1,0 +1,54 @@
+train_diffusion:
+  _target_: src.config.TrainDiffusionConfig
+  model_dir: results/pretrain/urmp_72h/
+  data_dir: dataset/diffusion/urmp_all_no_clip/
+  batch_size: 16
+  epochs: 10000
+  lr: 0.001
+  debug: false
+  output_dir: results/diffusion/20260109/
+  use_f0_diff: true
+  use_loudness_diff: true
+  guidance_scale: 2.0
+  use_lr_scheduler: true
+  scheduler_type: reduce_on_plateau
+  scheduler_patience: 50
+  scheduler_factor: 0.9
+  scheduler_min_lr: 1.0e-06
+  zero_init_output: false
+diffusion_model:
+  _target_: src.config.DiffusionModelConfig
+  model_type: unet
+  in_dim: 18
+  time_embed_dim: 128
+  film_cond_dim: 64
+  use_film: true
+  use_cross_attention: false
+  cfg_dropout_prob: 0.1
+  f0_score_scale: 0.1
+  use_note_mask: false
+  note_mask_scale: 0.2
+  down1_out_ch: 64
+  down2_out_ch: 128
+  down3_out_ch: 256
+  bot1_out_ch: 512
+  dit_hidden_dim: 256
+  dit_num_layers: 6
+  dit_num_heads: 8
+  dit_mlp_ratio: 4.0
+  num_timesteps: 1000
+  beta_start: 5.0e-05
+  beta_end: 0.03
+  use_diffusers: false
+loss:
+  _target_: src.config.LossConfig
+  loss:
+  - type: mse
+    ratio: 1.0
+    target: loudness
+  - type: mse
+    ratio: 1.0
+    target: z_feature
+  - type: mse
+    ratio: 1.0
+    target: pitch
