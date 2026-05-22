@@ -1,0 +1,54 @@
+train_diffusion:
+  _target_: src.config.TrainDiffusionConfig
+  model_dir: results/pretrain/urmp_72h/
+  data_dir: dataset/diffusion_dataset_urmp_corrected_filtered/
+  batch_size: 16
+  epochs: 2000
+  lr: 0.001
+  train_steps_per_epoch: 100
+  validation_steps_per_epoch: 10
+  generation_steps_per_epoch: 1
+  debug: false
+  output_dir: results/diffusion/
+  use_f0_diff: true
+  use_loudness_diff: true
+  guidance_scale: 2.0
+diffusion_model:
+  _target_: src.config.DiffusionModelConfig
+  model_type: unet
+  in_dim: 18
+  time_embed_dim: 128
+  film_cond_dim: 64
+  use_film: true
+  use_cross_attention: false
+  cfg_dropout_prob: 0.0
+  f0_score_scale: 0.2
+  down1_out_ch: 64
+  down2_out_ch: 128
+  down3_out_ch: 256
+  bot1_out_ch: 512
+  dit_hidden_dim: 256
+  dit_num_layers: 6
+  dit_num_heads: 8
+  dit_mlp_ratio: 4.0
+  num_timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+loss:
+  _target_: src.config.LossConfig
+  loss:
+  - type: mse
+    ratio: 1.0
+    target: loudness
+  - type: mse
+    ratio: 1.0
+    target: z_feature
+  - type: mse
+    ratio: 1.0
+    target: pitch
+  - type: l2
+    ratio: 0.001
+    target: loudness
+  - type: l2
+    ratio: 0.001
+    target: pitch

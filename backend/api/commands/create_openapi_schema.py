@@ -31,6 +31,23 @@ def create_operation_id(app: FastAPI):
             route.operation_id = snake_to_upper_camel(route.name)
 
 
+def _openapi_output_path(api: FastAPI) -> Path:
+    """Docker (/app) とローカル (backend/) の両方で書き込み可能なパスを返す。"""
+    candidates = [
+        Path(f"/app/api/controllers/{api.title}/openapi/openapi.yml"),
+        Path(__file__).resolve().parents[1]
+        / "controllers"
+        / api.title
+        / "openapi"
+        / "openapi.yml",
+    ]
+    for path in candidates:
+        if path.parent.exists() or path.parent.parent.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            return path
+    return candidates[-1]
+
+
 if __name__ == "__main__":
     apis = [backend_api]
     for api in apis:
@@ -38,7 +55,7 @@ if __name__ == "__main__":
         openapi_schema = api.openapi()
         replace_const_with_enum(openapi_schema)
 
-        with Path(f"/app/api/controllers/{api.title}/openapi/openapi.yml").open(
-            "w"
-        ) as f:
+        out = _openapi_output_path(api)
+        with out.open("w") as f:
             yaml.dump(openapi_schema, f, default_flow_style=False, allow_unicode=True)
+        print(f"Wrote OpenAPI schema to {out}")

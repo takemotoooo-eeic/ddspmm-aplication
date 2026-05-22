@@ -1,16 +1,14 @@
-from fastapi import APIRouter, Body, File, Form, UploadFile
-from typing import Generator
-import json
+from io import BytesIO
+
+from fastapi import APIRouter, File, UploadFile
+
 from api.controllers.backend_api.openapi import models
 from api.controllers.common import WAV_RESPONSE, WAVResponse
 from api.libs.exceptions import BadRequest
+from api.libs.instrument import parse_instrument_names_from_urmp_filename
 from api.libs.midi import verify_mid_file_format
 from api.libs.wav import verify_wav_file_format
-from api.models.ddsp import DDSPModel, TrainInput
-from api.models.midi_aligner import MidiAligner
-from io import BytesIO
-
-from fastapi.responses import StreamingResponse
+from api.models import MidiAligner, TrainInput, DDSPModel
 
 ddsp_router = APIRouter()
 
@@ -19,9 +17,7 @@ ddsp_router = APIRouter()
 async def train_ddsp(
     wav_file: UploadFile = File(..., description="WAVファイル"),
     midi_file: UploadFile = File(..., description="MIDIファイル"),
-    epochs: int = Form(..., description="エポック数"),
-    lr: float = Form(..., description="学習率"),
-) -> StreamingResponse:
+) -> models.Features:
     try:
         verify_wav_file_format(wav_file)
         verify_mid_file_format(midi_file)
@@ -29,36 +25,31 @@ async def train_ddsp(
         midi_file_bytes = await midi_file.read()
         wav_file_bytes = await wav_file.read()
 
-        params = models.TrainDDSPParams(
-            epochs=epochs,
-            lr=lr,
-        )
-
         midi_aligner = MidiAligner()
         aligned_midi_list, num_instruments, instrument_names = midi_aligner.align(
             wav_file_bytes, midi_file_bytes
         )
 
+        urmp_instrument_names = parse_instrument_names_from_urmp_filename(wav_file.filename)
+        if urmp_instrument_names is not None:
+            if len(urmp_instrument_names) == len(instrument_names):
+                instrument_names = urmp_instrument_names
+            else:
+                raise BadRequest(
+                    "WAVファイル名から取得した楽器数とMIDIの楽器数が一致しません。"
+                    f" (WAV: {urmp_instrument_names}, MIDI: {len(instrument_names)}件)"
+                )
+
         ddsp_model = DDSPModel()
         train_input = TrainInput(
-            epochs=params.epochs,
-            lr=params.lr,
             wav_file=wav_file_bytes,
             num_instruments=num_instruments,
             instrument_names=instrument_names,
             midi=aligned_midi_list,
         )
-        stream_output = ddsp_model.train(train_input)
-        return StreamingResponse(_format_stream_response(stream_output), media_type="application/jsonline")
+        return ddsp_model.train(train_input)
     except Exception as e:
-        raise BadRequest(e)
-    
-def _format_stream_response(generator: models.TrainDDSPOutputStream) -> Generator[str, None, None]:
-    for item in generator:
-        if isinstance(item, models.TrainingProgress):
-            yield json.dumps({"current_epoch": item.current_epoch, "total_epochs": item.total_epochs, "loss": item.loss}) + "\n"
-        elif isinstance(item, models.Features):
-            yield item.model_dump_json() + "\n"
+        raise BadRequest(str(e))
 
 @ddsp_router.post(
     "/ddsp/generate",

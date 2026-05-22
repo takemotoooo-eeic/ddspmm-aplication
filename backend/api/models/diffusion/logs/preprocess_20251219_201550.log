@@ -1,0 +1,19 @@
+2025-12-19 20:15:50 - preprocess - INFO - Logging initialized. Log file: results/diffusion/unet-2000-epochs-correct-data/logs/preprocess_20251219_201550.log
+2025-12-19 20:15:50 - preprocess - INFO - ============================================================
+2025-12-19 20:15:50 - preprocess - INFO - Starting diffusion model training...
+2025-12-19 20:15:50 - preprocess - INFO - Run name: unet-2000-epochs-correct-data
+2025-12-19 20:15:50 - preprocess - INFO - Output directory: results/diffusion/unet-2000-epochs-correct-data
+2025-12-19 20:15:50 - preprocess - INFO - Data directory: dataset/diffusion_dataset_urmp_corrected_filtered/
+2025-12-19 20:15:50 - preprocess - INFO - Model directory: results/pretrain/urmp_72h/
+2025-12-19 20:15:50 - preprocess - INFO - Batch size: 16
+2025-12-19 20:15:50 - preprocess - INFO - Epochs: 2000
+2025-12-19 20:15:50 - preprocess - INFO - Use loudness_diff: True
+2025-12-19 20:15:50 - preprocess - INFO - Use f0_diff: True
+2025-12-19 20:15:50 - preprocess - INFO - ============================================================
+2025-12-19 20:15:50 - preprocess - INFO - Saved Hydra config to results/diffusion/unet-2000-epochs-correct-data/hydra_config.yaml
+2025-12-19 20:15:52 - preprocess - INFO - train data length: 652
+2025-12-19 20:15:53 - preprocess - INFO - test data length: 253
+2025-12-19 20:15:53 - preprocess - INFO - device: cuda:0
+2025-12-19 20:15:53 - preprocess - INFO - epochs: 2000
+2025-12-19 20:15:53 - preprocess - INFO - loudness_mean: -51.83556569773824, loudness_std: 13.820042209349094
+2025-12-19 20:15:53 - preprocess - INFO - loudness_diff_mean: -7.438101485059305, loudness_diff_std: 9.837300914706287

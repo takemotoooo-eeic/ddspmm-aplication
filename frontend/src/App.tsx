@@ -5,496 +5,299 @@ import {
   CssBaseline,
   ThemeProvider,
   Toolbar,
-  Typography
+  Typography,
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { generateDdspAudio } from './api/backend';
+import { ExportButton } from './components/buttons/ExportButton';
 import { AddButton } from './components/buttons/ImportButton';
 import { LoadButton } from './components/buttons/LoadButton';
 import { RefreshButton } from './components/buttons/refreshButton';
 import { StartButton } from './components/buttons/StartButton';
 import { StopButton } from './components/buttons/StopButton';
+import { ImportTrackDialog } from './components/dialogs/ImportTrackDialog';
+import { LoadTrackDialog } from './components/dialogs/LoadTrackDialog';
+import { EditPanel } from './components/editPanel/EditPanel';
+import { ModeSelector } from './components/layout/ModeSelector';
+import { TIME_SCALE } from './constants/editor';
+import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useDisclosure } from './hooks/useDisclosure';
-import { EditDialog } from './modules/editDialog';
-import { ImportTrackDialog } from './modules/importTrackDialog';
-import { LoadTrackDialog } from './modules/loadTrackDialog';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
-import { useGenerateAudioFromDdsp, useTrainDdsp } from './orval/backend-api';
 import { DDSPGenerateParams } from './orval/models/backend-api';
-import { LearnData } from './types/learnData';
-import { TrackData } from './types/trackData';
+import { importTracksFromFiles } from './services/importTracks';
+import { AppMode } from './types/appMode';
+import { supportsParamLoad, TrackData } from './types/trackData';
+import { durationToWidth } from './utils/audio';
+import { downloadTracksAsJsonl } from './utils/exportParams';
 
-// ダークテーマ
 const theme = createTheme({
   palette: {
     mode: 'dark',
     primary: { main: '#646cff' },
-    background: {
-      default: '#242424',
-      paper: '#1e1e1e'
-    },
-    text: { primary: '#ffffff' }
-  }
+    background: { default: '#242424', paper: '#1e1e1e' },
+    text: { primary: '#ffffff' },
+  },
 });
 
+const formatTime = (seconds: number) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>('diffusion_ddsp');
   const [wavFile, setWavFile] = useState<File | null>(null);
   const [midFile, setMidFile] = useState<File | null>(null);
   const [jsonlFile, setJsonlFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const isPlayingRef = useRef(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
-  const startTimeRef = useRef<number>(0);
-  const animationFrameRef = useRef<number>(0);
-  const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
-  const playbackStartTimeRef = useRef<number>(0);
-  const [learnData, setLearnData] = useState<LearnData | null>(null);
 
+  const {
+    isPlaying,
+    currentTime,
+    trackDuration,
+    handlePlay,
+    handleStop,
+    seekToTime,
+    isPlayingRef,
+  } = useAudioPlayback(tracks);
 
-  const [zoomLevel, setZoomLevel] = useState(1); // ズームレベル（1-10倍）
-  const timeScale = 200 * zoomLevel;
+  const waveformWidth =
+    tracks.length > 0 ? durationToWidth(trackDuration, TIME_SCALE) : 2000;
 
-  const handleTrackClick = (track: TrackData) => {
-    setSelectedTrack(track);
+  const importDialog = useDisclosure({});
+  const loadDialog = useDisclosure({});
+
+  const handleModeChange = (mode: AppMode) => {
+    setAppMode(mode);
+    setTracks([]);
+    setSelectedTrack(null);
   };
 
   const handleMuteToggle = (trackId: string) => {
-    setTracks(prevTracks =>
-      prevTracks.map(track =>
-        track.id === trackId
-          ? { ...track, muted: !track.muted }
-          : track
-      )
+    setTracks(prev =>
+      prev.map(t => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
     );
   };
 
   const handleVolumeChange = (trackId: string, volume: number) => {
-    setTracks(prevTracks =>
-      prevTracks.map(track =>
-        track.id === trackId
-          ? { ...track, volume }
-          : track
-      )
-    );
+    setTracks(prev => prev.map(t => (t.id === trackId ? { ...t, volume } : t)));
   };
 
-  const { trigger: trainTrigger } = useTrainDdsp();
-  const { trigger: generateAudioTrigger } = useGenerateAudioFromDdsp();
-
-  const {
-    isOpen: isOpenImportTracksDialog,
-    open: openImportTracksDialog,
-    close: closeImportTracksDialog,
-  } = useDisclosure({});
-
-  const {
-    isOpen: isOpenLoadParamsDialog,
-    open: openLoadParamsDialog,
-    close: closeLoadParamsDialog,
-  } = useDisclosure({});
-
-  // 時間をフォーマットする関数
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  // 現在時間の更新
-  const updateCurrentTime = () => {
-    if (!isPlayingRef.current || !audioContextRef.current) {
-      return;
-    }
-
-    const newTime = audioContextRef.current.currentTime - playbackStartTimeRef.current;
-
-    // トラックの終端に達したかチェック
-    const trackDuration = tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 0;
-    if (newTime >= trackDuration) {
-      handleStop();
-      return;
-    }
-
-    if (newTime >= 0) {
-      setCurrentTime(newTime);
-    }
-
-    // 次のフレームで再度更新をスケジュール
-    animationFrameRef.current = requestAnimationFrame(updateCurrentTime);
-  };
-
-  // 再生処理
-  const handlePlay = async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-    }
-
-    if (!isPlayingRef.current) {
-      const startTime = audioContextRef.current.currentTime;
-      startTimeRef.current = startTime;
-      // 現在のカーソル位置を再生開始位置として設定
-      playbackStartTimeRef.current = startTime - currentTime;
-      sourcesRef.current = [];
-
-      try {
-        // 各トラックのオーディオバッファを準備
-        for (const track of tracks) {
-          if (track.muted) continue;
-
-          if (!audioBuffersRef.current.has(track.id)) {
-            const arrayBuffer = await track.wavData.arrayBuffer();
-            const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
-            audioBuffersRef.current.set(track.id, audioBuffer);
-          }
-
-          const source = audioContextRef.current.createBufferSource();
-          const gainNode = audioContextRef.current.createGain();
-
-          source.buffer = audioBuffersRef.current.get(track.id)!;
-          gainNode.gain.value = track.volume;
-
-          source.connect(gainNode);
-          gainNode.connect(audioContextRef.current.destination);
-
-          // 現在のカーソル位置から再生を開始
-          source.start(0, currentTime);
-          sourcesRef.current.push(source);
-        }
-
-        isPlayingRef.current = true;
-        setIsPlaying(true);
-        updateCurrentTime();
-      } catch (error) {
-        console.error('Error during playback:', error);
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-      }
-    }
-  };
-
-  // 停止処理
-  const handleStop = () => {
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    // すべてのソースを停止
-    sourcesRef.current.forEach(source => {
-      try {
-        source.stop();
-      } catch (e) {
-        console.error('Error stopping source:', e);
-      }
-    });
-    sourcesRef.current = [];
-    audioBuffersRef.current.clear();
-  };
-
-  // コンポーネントのクリーンアップ
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
-  }, []);
-
-  const handleImportTracks = async (epochs: number, lr: number) => {
+  const handleImport = async () => {
     if (!wavFile || !midFile) return;
-
-    const form = new FormData();
-    form.append('wav_file', wavFile);
-    form.append('midi_file', midFile);
-    form.append('epochs', epochs.toString());
-    form.append('lr', lr.toString());
-    let features: { features: Array<{ instrument_name: string; pitch: number[]; loudness: number[]; z_feature: number[][]; notes: Array<{ start: number; frequency: number; duration: number }> }> } = { features: [] };
     try {
-      const resp = await fetch('/backend-api/ddsp/train', {
-        method: 'POST',
-        body: form,
-        headers: { Accept: 'application/x-ndjson' }
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop()!;
-        for (const line of lines) {
-          if (!line) continue;
-          const data = JSON.parse(line);
-          if ('current_epoch' in data) {
-            setLearnData(data);
-          } else if ('features' in data) {
-            features.features = data.features;
-          }
-        }
-      }
-
-      const newTracks: TrackData[] = [];
-
-      for (const feature of features.features) {
-        const body: DDSPGenerateParams = {
-          z_feature: feature.z_feature,
-          loudness: feature.loudness,
-          pitch: feature.pitch,
-        };
-        const response = await generateAudioTrigger(body);
-        const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
-
-        newTracks.push({
-          id: `track-${Date.now()}-${Math.random()}`,
-          name: feature.instrument_name,
-          instrument: feature.instrument_name,
-          wavData: wavBlob,
-          features: feature,
-          muted: false,
-          volume: 1.0,
-        });
-      }
-
-      setTracks(prev => [...prev, ...newTracks]);
+      const newTracks = await importTracksFromFiles(appMode, wavFile, midFile);
+      setTracks(newTracks);
     } catch (e) {
-      console.error('Training error:', e);
+      console.error('Import error:', e);
     }
     setWavFile(null);
     setMidFile(null);
-    closeImportTracksDialog();
+    importDialog.close();
   };
 
   const handleLoadParams = async () => {
     if (!jsonlFile) return;
-    // jsonlファイルを読み込んで、DDSPのパラメータを読み込み、generateAudioTriggerを呼び出して、wavファイルを生成する
-    return new Promise<void>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const text = e.target?.result as string;
-          const lines = text.split('\n');
-          for (const line of lines) {
-            if (!line) continue;
-            const data = JSON.parse(line);
-            const body: DDSPGenerateParams = {
-              z_feature: data.z_feature,
-              loudness: data.loudness,
-              pitch: data.pitch,
-            };
-            const response = await generateAudioTrigger(body);
-            const wavBlob = new Blob([await response.arrayBuffer()], { type: 'audio/wav' });
-            setTracks(prev => [...prev, {
-              id: `track-${Date.now()}-${Math.random()}`,
-              name: data.instrument_name,
-              instrument: data.instrument_name,
-              wavData: wavBlob,
-              features: data,
-              muted: false,
-              volume: 1.0,
-            }]);
-          }
-          // すべてのオーディオ生成が完了してからダイアログを閉じる
-          setJsonlFile(null);
-          closeLoadParamsDialog();
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
+    const text = await jsonlFile.text();
+    const lines = text.split('\n');
+    const newTracks: TrackData[] = [];
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const data = JSON.parse(line);
+      const body: DDSPGenerateParams = {
+        z_feature: data.z_feature,
+        loudness: data.loudness,
+        pitch: data.pitch,
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsText(jsonlFile);
-    });
+      const wav = await generateDdspAudio(body);
+      const blockSize = 512;
+      newTracks.push({
+        id: `track-${Date.now()}-${Math.random()}`,
+        name: data.instrument_name,
+        instrument: data.instrument_name,
+        wavData: wav,
+        features: data,
+        signalLength: data.pitch.length * blockSize,
+        muted: false,
+        volume: 1,
+      });
+    }
+    setTracks(newTracks);
+    setJsonlFile(null);
+    loadDialog.close();
   };
 
-  // タイムラインクリック時の処理
-  const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>, isEditDialog: boolean = false) => {
-    if (!tracks.length) return;
-    if (isPlayingRef.current) {
-      return;
-    }
-
+  const handleTimelineClick = (
+    event: React.MouseEvent<HTMLDivElement>,
+    useEditScale = false,
+  ) => {
+    if (!tracks.length || isPlayingRef.current) return;
+    const scale = useEditScale ? TIME_SCALE : 200;
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
-    const totalWidth = Math.floor((tracks[0].wavData.size / (16000 * 2)) * (isEditDialog ? timeScale : 200));
-    const newTime = (clickX / totalWidth) * (tracks[0].wavData.size / (16000 * 2));
-
-    setCurrentTime(newTime);
-    playbackStartTimeRef.current = (audioContextRef.current?.currentTime || 0) - newTime;
+    const width = durationToWidth(trackDuration, scale);
+    seekToTime((clickX / width) * trackDuration);
   };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {/* 固定ヘッダー (全幅) */}
       <AppBar
         position="fixed"
         sx={{
-          top: 0,
-          left: 0,
           width: '100vw',
           bgcolor: '#181818',
-          zIndex: theme => theme.zIndex.drawer + 1
+          zIndex: t => t.zIndex.drawer + 1,
         }}
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Typography variant="h5">DDSP Editor</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <ModeSelector mode={appMode} onChange={handleModeChange} />
+          </Box>
 
-          {/* 再生コントロール */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h5" sx={{ minWidth: '60px' }}>
+            <Typography variant="h5" sx={{ minWidth: 60 }}>
               {formatTime(currentTime)}
             </Typography>
             <StartButton
               onClick={handlePlay}
               disabled={tracks.length === 0 || isPlaying}
             />
-            <StopButton
-              onClick={handleStop}
-              disabled={!isPlaying}
-            />
+            <StopButton onClick={handleStop} disabled={!isPlaying} />
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <RefreshButton onClick={() => {
-              setTracks([]);
-              setSelectedTrack(null);
-            }} />
-            <LoadButton disabled={tracks.length !== 0} onClick={openLoadParamsDialog} />
-            <AddButton disabled={tracks.length !== 0} onClick={openImportTracksDialog} />
+            <RefreshButton
+              onClick={() => {
+                setTracks([]);
+                setSelectedTrack(null);
+              }}
+            />
+            {supportsParamLoad(appMode) && (
+              <>
+                <LoadButton
+                  disabled={tracks.length !== 0}
+                  onClick={loadDialog.open}
+                />
+                <ExportButton
+                  disabled={
+                    tracks.length === 0 ||
+                    !tracks.some(t => t.features != null)
+                  }
+                  onClick={() => downloadTracksAsJsonl(tracks)}
+                />
+              </>
+            )}
+            <AddButton
+              disabled={tracks.length !== 0}
+              onClick={importDialog.open}
+            />
           </Box>
         </Toolbar>
       </AppBar>
 
-      {/* ヘッダースペーサー */}
       <Toolbar />
 
-      {/* メインビューポート */}
       <Box sx={{ display: 'flex', height: '100%' }}>
-        {/* サイドバー（完全固定） */}
-        <Box sx={{
-          width: 280,
-          position: 'fixed',
-          top: 64, // AppBarの高さ
-          left: 0,
-          height: 'calc(100vh - 64px)',
-          zIndex: 5,
-          bgcolor: '#1e1e1e',
-          display: 'flex',
-          flexDirection: 'column',
-          borderRight: '1px solid #333',
-          mt: '0px',
-          pb: 2
-        }}>
-          {/* タイムライン分の余白 */}
-          <Box sx={{ height: '30px', bgcolor: '#1e1e1e', borderBottom: '1px solid #333' }} />
-          {/* 時間表示バー */}
-          {tracks.map((track, idx) => (
+        <Box
+          sx={{
+            width: 280,
+            position: 'fixed',
+            top: 64,
+            left: 0,
+            height: 'calc(100vh - 64px)',
+            zIndex: 5,
+            bgcolor: '#1e1e1e',
+            borderRight: '1px solid #333',
+          }}
+        >
+          <Box sx={{ height: 30, borderBottom: '1px solid #333' }} />
+          {tracks.map(track => (
             <TrackSidebar
               key={track.id}
               track={track}
-              selected={selectedTrack === track}
-              onClick={() => handleTrackClick(track)}
+              selected={selectedTrack?.id === track.id}
+              onClick={() => setSelectedTrack(track)}
               onMuteToggle={() => handleMuteToggle(track.id)}
-              onVolumeChange={(volume) => handleVolumeChange(track.id, volume)}
+              onVolumeChange={v => handleVolumeChange(track.id, v)}
             />
           ))}
         </Box>
-        {/* 波形部分（横スクロール） */}
-        <Box sx={{ flexGrow: 1, overflowX: 'auto', height: 'calc(100vh - 64px)', ml: '280px', bgcolor: 'background.default', position: 'relative' }}>
-          {/* 再生位置カーソル */}
+
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflowX: 'auto',
+            height: 'calc(100vh - 64px)',
+            ml: '280px',
+            bgcolor: 'background.default',
+            position: 'relative',
+          }}
+        >
           <Box
             sx={{
               position: 'absolute',
-              left: tracks.length > 0 ? (currentTime / (tracks[0].wavData.size / (16000 * 2))) * Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 0,
+              left:
+                trackDuration > 0 ? (currentTime / trackDuration) * waveformWidth : 0,
               top: 0,
               height: '100%',
               width: 2,
-              bgcolor: 'rgba(255, 255, 255, 0.3)',
+              bgcolor: 'rgba(255,255,255,0.3)',
               zIndex: 2,
               pointerEvents: 'none',
             }}
           />
-          <Box onClick={handleTimelineClick} sx={{ cursor: 'pointer' }}>
-            {/* タイムラインを追加 */}
-            <Timeline
-              duration={tracks.length > 0 ? tracks[0].wavData.size / (16000 * 2) : 10}
-              width={tracks.length > 0 ? Math.floor((tracks[0].wavData.size / (16000 * 2)) * 200) : 2000}
-            />
-            {tracks.map((track, idx) => (
+          <Box onClick={e => handleTimelineClick(e)} sx={{ cursor: 'pointer' }}>
+            <Timeline duration={trackDuration || 10} width={waveformWidth} />
+            {tracks.map(track => (
               <TrackRowWaveform
                 key={track.id}
                 track={track}
-                selected={selectedTrack === track}
+                selected={selectedTrack?.id === track.id}
                 setSelectedTrack={setSelectedTrack}
               />
             ))}
-            {/* 空いている部分をクリック可能にする */}
-            <Box
-              sx={{
-                height: 'calc(100vh - 64px - 30px - ' + (tracks.length * 100) + 'px)',
-                cursor: 'pointer',
-              }}
-              onClick={handleTimelineClick}
-            />
           </Box>
         </Box>
       </Box>
 
-      {/* トラックインポートダイアログ */}
-      {
-        isOpenImportTracksDialog && (
-          <ImportTrackDialog
-            open={isOpenImportTracksDialog}
-            onClose={closeImportTracksDialog}
-            wavFile={wavFile}
-            setWavFile={setWavFile}
-            midFile={midFile}
-            setMidFile={setMidFile}
-            onImport={handleImportTracks}
-            learnData={learnData}
-            setLearnData={setLearnData}
-          />
-        )
-      }
-      {
-        isOpenLoadParamsDialog && (
-          <LoadTrackDialog
-            open={isOpenLoadParamsDialog}
-            onClose={closeLoadParamsDialog}
-            jsonlFile={jsonlFile}
-            setJsonlFile={setJsonlFile}
-            onLoad={handleLoadParams}
-          />
-        )
-      }
-      {/* ピアノロール(トラック選択時のみ下部に表示) */}
-      {
-        selectedTrack && (
-          <EditDialog
-            currentTime={currentTime}
-            selectedTrack={selectedTrack}
-            tracks={tracks}
-            setTracks={setTracks}
-            setSelectedTrack={setSelectedTrack}
-            onTimeLineClick={(event) => handleTimelineClick(event, true)}
-            setZoomLevel={setZoomLevel}
-            zoomLevel={zoomLevel}
-            timeScale={timeScale}
-          />
-        )
-      }
+      {importDialog.isOpen && (
+        <ImportTrackDialog
+          open={importDialog.isOpen}
+          onClose={importDialog.close}
+          wavFile={wavFile}
+          setWavFile={setWavFile}
+          midFile={midFile}
+          setMidFile={setMidFile}
+          onImport={handleImport}
+        />
+      )}
+
+      {loadDialog.isOpen && supportsParamLoad(appMode) && (
+        <LoadTrackDialog
+          open={loadDialog.isOpen}
+          onClose={loadDialog.close}
+          jsonlFile={jsonlFile}
+          setJsonlFile={setJsonlFile}
+          onLoad={handleLoadParams}
+        />
+      )}
+
+      {selectedTrack && (
+        <EditPanel
+          appMode={appMode}
+          currentTime={currentTime}
+          selectedTrack={selectedTrack}
+          tracks={tracks}
+          setTracks={setTracks}
+          setSelectedTrack={setSelectedTrack}
+          onTimeLineClick={e => handleTimelineClick(e, true)}
+        />
+      )}
     </ThemeProvider>
   );
-}
+};

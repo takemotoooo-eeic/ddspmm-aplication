@@ -1,2 +1,9 @@
 .venv
 wandb/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend.egg-info/
+.git
+test/*.wav
+api/models/**/logs/

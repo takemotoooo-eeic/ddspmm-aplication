@@ -20,3 +20,19 @@ WAV_RESPONSE = {
 
 class WAVResponse(StreamingResponse):
     media_type = "audio/wav"
+
+
+ZIP_RESPONSE = {
+    "content": {
+        "application/zip": {
+            "schema": {
+                "type": "string",
+                "format": "binary",
+            },
+        },
+    },
+}
+
+
+class ZIPResponse(StreamingResponse):
+    media_type = "application/zip"

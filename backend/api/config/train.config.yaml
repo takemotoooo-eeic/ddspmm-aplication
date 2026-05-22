@@ -1,19 +1,31 @@
+# @package _global_
 train:
-  data_dir: urmp_separate_dataset/
-  statistics_dir: pretrain_dataset/statistics/
+  _target_: src.config.TrainConfig
+  model_dir: results/pretrain/urmp_72h/
+  statistics_dir: dataset/pretrain_dataset_urmp_v2/statistics/
   batch_size: 16
-  epochs: 2000
-  lr: 1e-1
-  debug: true
+  epochs: 1000
+  lr: 0.1
+  debug: false
+  output_dir: results/ddspmm/20260508/
+  # Diffusion guided sampling用のパラメータ
+  diffusion_model_dir: results/diffusion/unet-2000-epochs-correct-data/
+  enable_guidance: true
+  guidance_scale_start: 0
+  guidance_scale_end: 3.0
+  direct_optim: ["loudness"]
+  guiding_params: ["pitch", "loudness", "z_feature"]
 
 loss:
-  - type: "mel"
-    ratio: 1.0
-    scales: [4096, 2048, 1024, 512, 256, 128]
-    overlap: 0.75
+  _target_: src.config.LossConfig
+  loss:
+    - type: "mel"
+      ratio: 1.0
+      scales: [4096, 2048, 1024, 512, 256, 128]
+      overlap: 0.75
   # - type: "td"
-  #   ratio: 1
+  #   ratio: 1.0
   #   target: "loudness"
-  - type: "fd"
-    target: "loudness"
-    ratio: 0.0001
+  # - type: "fd"
+  #   target: "loudness"
+  #   ratio: 0.0001

@@ -49,3 +49,16 @@ dev = [
 
 [tool.setuptools]
 packages = ["api"]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchaudio = { index = "pytorch-cu124" }
+
+# crepe 0.0.16 の setup.py が pkg_resources を参照するため（setuptools 81+ では不可）
+[tool.uv.extra-build-dependencies]
+crepe = ["setuptools>=61,<81"]

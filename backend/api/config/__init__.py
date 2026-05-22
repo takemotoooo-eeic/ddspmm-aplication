@@ -1,4 +1,4 @@
-from .model.loss_config import (
+from .model.loss import (
     FDLossConfig,
     LossConfig,
     LossType,
@@ -6,9 +6,9 @@ from .model.loss_config import (
     TargetType,
     TDLossConfig,
 )
-from .model.model_config import ModelConfig
-from .model.preprocess_config import PreprocessConfig
-from .model.train_config import TrainConfig
+from .model.model import ModelConfig
+from .model.preprocess import PreprocessConfig
+from .model.train import TrainConfig
 
 __all__ = [
     "TrainConfig",

@@ -1,5 +1,4 @@
 from api.controllers.common import CustomBaseModel
-from typing import Generator
 
 
 class Note(CustomBaseModel):
@@ -26,21 +25,13 @@ class DDSPGenerateParams(CustomBaseModel):
     z_feature: list[list[float]]
 
 
-class TrainDDSPParams(CustomBaseModel):
-    epochs: int
-    lr: float
-
-
-class TrainingProgress(CustomBaseModel):
-    current_epoch: int
-    total_epochs: int
-    loss: float
-
-
-TrainDDSPOutputStream = Generator[TrainingProgress | Features, None, None]
-
-
 class DiffusionGenerateParams(CustomBaseModel):
+    notes: list[Note]
+    instrument_name: str
+    signal_length: int
+
+
+class FluidsynthGenerateParams(CustomBaseModel):
     notes: list[Note]
     instrument_name: str
     signal_length: int
