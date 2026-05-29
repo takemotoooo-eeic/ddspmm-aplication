@@ -258,6 +258,11 @@ components:
         signal_length:
           type: integer
           title: Signal Length
+        num_denoising_steps:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Num Denoising Steps
       title: DiffusionGenerateParams
     FluidsynthGenerateParams:
       type: object

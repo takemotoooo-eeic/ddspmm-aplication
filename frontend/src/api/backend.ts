@@ -1,12 +1,16 @@
 import { instance } from '../libs/mutator';
-import { unzipToMap } from '../utils/zip';
 import type {
   DDSPGenerateParams,
-  DiffusionGenerateParams,
+  DiffusionGenerateParams as OrvalDiffusionGenerateParams,
   Feature,
   Features,
   Note,
 } from '../orval/models/backend-api';
+import { unzipToMap } from '../utils/zip';
+
+export type DiffusionGenerateParams = OrvalDiffusionGenerateParams & {
+  num_denoising_steps?: number | null;
+};
 
 export interface FluidsynthGenerateParams {
   notes: Note[];
@@ -79,19 +83,23 @@ export async function parseFluidsynthZip(zipBlob: Blob): Promise<FluidsynthZipEn
     throw new Error('manifest.json not found in FluidSynth ZIP');
   }
   const manifest = JSON.parse(await manifestBlob.text()) as {
-    features: Array<{ instrument_name: string; notes: Note[] }>;
+    features: Array<{ instrument_name: string; wav_file?: string; notes: Note[] }>;
   };
 
   const entries: FluidsynthZipEntry[] = [];
   for (const feature of manifest.features) {
-    const safeName = feature.instrument_name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const wavBlob = files.get(`${safeName}.wav`);
+    const wavKey =
+      feature.wav_file ??
+      `${feature.instrument_name.replace(/[^a-zA-Z0-9_-]/g, '_')}.wav`;
+    const wavBlob = files.get(wavKey);
     if (!wavBlob) {
-      throw new Error(`WAV not found for instrument: ${feature.instrument_name}`);
+      throw new Error(
+        `WAV not found for instrument: ${feature.instrument_name} (expected: ${wavKey})`,
+      );
     }
     entries.push({
       instrument_name: feature.instrument_name,
-      wavBlob,
+      wavBlob: new Blob([await wavBlob.arrayBuffer()], { type: 'audio/wav' }),
       notes: feature.notes,
     });
   }
@@ -116,11 +124,12 @@ export async function featureToTrack(
   const wavData = await generateWav(body);
   const blockSize = 512;
   const signalLength = feature.pitch.length * blockSize;
+  const notes = feature.notes ?? [];
   return {
     name: feature.instrument_name,
     instrument: feature.instrument_name,
     wavData,
-    features: feature,
+    features: { ...feature, notes },
     signalLength,
   };
 }

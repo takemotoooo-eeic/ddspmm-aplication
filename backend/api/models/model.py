@@ -685,7 +685,6 @@ class Diffuser:
         t: torch.Tensor,
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
-        guidance_scale: float = 1.0,
     ):
         """
         ノイズ除去（サンプリング時）
@@ -696,7 +695,6 @@ class Diffuser:
             t: (B,) - 時間ステップ (1-indexed)
             instrument_ids: (B,) - 楽器ID
             f0_score: (B, L) - f0スコア
-            guidance_scale: CFGのガイダンススケール（1.0でCFG無効、>1.0で条件の影響を強化）
         Returns:
             x_prev: (B, L, D) - 前のステップのサンプル
         """
@@ -715,28 +713,13 @@ class Diffuser:
         )  # (N,)
 
         N = alpha.size(0)
-        # (N,) -> (N, 1, 1) にviewして、pred_x_0 (B, L, D) と掛け算できるようにする
         alpha = alpha.view(N, 1, 1)
         alpha_bar = alpha_bar.view(N, 1, 1)
         alpha_bar_prev = alpha_bar_prev.view(N, 1, 1)
         beta = beta.view(N, 1, 1)
 
         with torch.no_grad():
-            if guidance_scale > 1.0:
-                # CFG: 条件付きと条件なしの両方を計算
-                # 条件付き
-                cond_mask = torch.ones(N, device=x.device, dtype=torch.bool)
-                eps_cond = model(x, t, instrument_ids, f0_score, instrument_cond_mask=cond_mask)
-                
-                # 条件なし
-                uncond_mask = torch.zeros(N, device=x.device, dtype=torch.bool)
-                eps_uncond = model(x, t, instrument_ids, f0_score, instrument_cond_mask=uncond_mask)
-                
-                # CFG適用: eps_cond + guidance_scale * (eps_cond - eps_uncond)
-                eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
-            else:
-                # CFG無効（通常の条件付き予測）
-                eps = model(x, t, instrument_ids, f0_score)
+            eps = model(x, t, instrument_ids, f0_score)
 
         # 予測されたノイズから x_0 を推定
         pred_x_0 = (x - torch.sqrt(1 - alpha_bar) * eps) / torch.sqrt(alpha_bar)
@@ -754,13 +737,46 @@ class Diffuser:
 
         return mu + noise * std
 
+    def denoise_ddim(
+        self,
+        model: nn.Module,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        instrument_ids: torch.Tensor,
+        f0_score: torch.Tensor,
+        prev_t: int,
+    ):
+        """DDIM (eta=0) による決定論的デノイジング。少ステップサンプリング向け。"""
+        t_idx = t - 1
+        alpha_bar = self.alpha_bars[t_idx]  # (N,)
+        N = alpha_bar.size(0)
+        alpha_bar = alpha_bar.view(N, 1, 1)
+
+        if prev_t > 0:
+            alpha_bar_prev = self.alpha_bars[prev_t - 1].expand(N).view(N, 1, 1)
+        else:
+            alpha_bar_prev = torch.ones(N, 1, 1, device=self.device)
+
+        with torch.no_grad():
+            eps = model(x, t, instrument_ids, f0_score)
+
+        pred_x_0 = (x - torch.sqrt(1 - alpha_bar) * eps) / torch.sqrt(alpha_bar)
+        return torch.sqrt(alpha_bar_prev) * pred_x_0 + torch.sqrt(1 - alpha_bar_prev) * eps
+
+    @staticmethod
+    def _build_sampling_timesteps(max_steps: int, steps: int) -> list[int]:
+        if steps == max_steps:
+            return list(range(max_steps, 0, -1))
+        timesteps = torch.linspace(max_steps, 1, steps, dtype=torch.long).tolist()
+        return sorted(set(timesteps), reverse=True)
+
     def sample(
         self,
         model: nn.Module,
         shape: tuple,
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
-        guidance_scale: float = 1.0,
+        num_denoising_steps: int | None = None,
     ):
         """
         サンプリング
@@ -770,16 +786,35 @@ class Diffuser:
             shape: (B, L, D) - 生成したい形状
             instrument_ids: (B,) - 楽器ID
             f0_score: (B, L) - f0スコア
-            guidance_scale: CFGのガイダンススケール（1.0でCFG無効、>1.0で条件の影響を強化）
+            num_denoising_steps: デノイジング回数（省略時は num_timesteps）
         """
         batch_size, _, _ = shape
         x = torch.randn(shape, device=self.device)
 
-        pbar: tqdm = tqdm(desc="Sampling", total=self.num_timesteps)
+        max_steps = self.num_timesteps
+        steps = num_denoising_steps if num_denoising_steps is not None else max_steps
+        if steps < 1 or steps > max_steps:
+            raise ValueError(
+                f"num_denoising_steps must be between 1 and {max_steps}, got {steps}"
+            )
 
-        for i in range(self.num_timesteps, 0, -1):
+        timesteps = self._build_sampling_timesteps(max_steps, steps)
+        use_ddim = steps < max_steps
+
+        pbar: tqdm = tqdm(
+            desc="Sampling (DDIM)" if use_ddim else "Sampling",
+            total=len(timesteps),
+        )
+
+        for idx, i in enumerate(timesteps):
             t = torch.tensor([i] * batch_size, device=self.device, dtype=torch.long)
-            x = self.denoise(model, x, t, instrument_ids, f0_score, guidance_scale=guidance_scale)
+            prev_t = timesteps[idx + 1] if idx + 1 < len(timesteps) else 0
+            if use_ddim:
+                x = self.denoise_ddim(
+                    model, x, t, instrument_ids, f0_score, prev_t=prev_t
+                )
+            else:
+                x = self.denoise(model, x, t, instrument_ids, f0_score)
             pbar.set_postfix({"t": i})
             pbar.update(1)
         pbar.close()
@@ -792,7 +827,7 @@ class Diffuser:
         t: torch.Tensor,
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
-        ddsp_model: nn.Module,
+        ddsp_decoder: nn.Module,
         loss_fn: nn.Module,
         loss_config,
         split_params_fn: callable,
@@ -809,7 +844,6 @@ class Diffuser:
         loudness_original_std: float,
         loudness_score: torch.Tensor | None = None,
         guidance_scale: float = 1.0,
-        cfg_guidance_scale: float = 1.0,
         instrument_names: list[int | Instrument] | None = None,
         segment_num: int | None = None,
         num_instruments: int | None = None,
@@ -877,21 +911,7 @@ class Diffuser:
         beta = beta.view(N, 1, 1)
 
         with torch.no_grad():
-            if cfg_guidance_scale > 1.0:
-                # CFG: 条件付きと条件なしの両方を計算
-                # 条件付き
-                cond_mask = torch.ones(N, device=x.device, dtype=torch.bool)
-                eps_cond = model(x, t, instrument_ids, f0_score, instrument_cond_mask=cond_mask)
-                
-                # 条件なし
-                uncond_mask = torch.zeros(N, device=x.device, dtype=torch.bool)
-                eps_uncond = model(x, t, instrument_ids, f0_score, instrument_cond_mask=uncond_mask)
-                
-                # CFG適用: eps_uncond + cfg_guidance_scale * (eps_cond - eps_uncond)
-                eps_pred = eps_uncond + cfg_guidance_scale * (eps_cond - eps_uncond)
-            else:
-                # CFG無効（通常の条件付き予測）
-                eps_pred = model(x, t, instrument_ids, f0_score)
+            eps_pred = model(x, t, instrument_ids, f0_score)
 
         # x_tから勾配を取るために、requires_grad=Trueにする
         x_grad = x.detach().requires_grad_(True)
@@ -924,18 +944,16 @@ class Diffuser:
         all_loudnesses = all_loudnesses.float()
         all_z_features = all_z_features.float()
 
-        # DDSPで全バッチの音声を一度に生成
-        ddsp_model.train()  # 勾配計算のためにtrainモード
-        for p in ddsp_model.parameters():
+        # DDSP decoder で全バッチの音声を一度に生成
+        ddsp_decoder.train()  # 勾配計算のためにtrainモード
+        for p in ddsp_decoder.parameters():
             p.requires_grad_(False)
-        
-        # DDSPに入力する形式に変換
-        
+
         f0_input = all_f0s.unsqueeze(-1).float()  # (B, L, 1)
         loudness_input = all_loudnesses.unsqueeze(-1)  # (B, L, 1)
         z_feature_input = all_z_features  # (B, L, 16)
 
-        signals, _, _, _ = ddsp_model.decoder(
+        signals, _, _, _ = ddsp_decoder(
             f0_input,
             loudness_input,
             z_feature_input,
@@ -1005,23 +1023,12 @@ class Diffuser:
         grad_norm_per_dim = torch.norm(grad, dim=norm_dims, keepdim=True)
         grad_normalized = grad / (grad_norm_per_dim + eps)
 
-        # 勾配をスケーリングしてxに直接適用
         guidance_term = guidance_scale * grad_normalized
 
-        # eps_predとガイダンス項の比を計算してpbarに表示
         if pbar is not None:
-            x_norm = torch.norm(x).item()
-            guidance_term_norm = torch.norm(guidance_term).item()
-            if x_norm > 0:
-                ratio = guidance_term_norm / x_norm
-                current_t = t[0].item() if len(t) > 0 else 0
-                pbar.set_postfix({
-                    "t": current_t,
-                    "loss": f"{loss.item():.4f}",
-                    "guidance_scale": f"{guidance_scale:.3f}",
-                    "eps_ratio": f"{ratio:.4f}"
-                })
-                pbar.update(1)
+            current_t = t[0].item() if len(t) > 0 else 0
+            pbar.set_postfix({"t": current_t, "loss": f"{loss.item():.4f}", "guidance_scale": f"{guidance_scale:.3f}"})
+            pbar.update(1)
 
         if "pitch" in guiding_params:
             x[:, :, 0] = x[:, :, 0] - guidance_term[:, :, 0]
@@ -1070,7 +1077,7 @@ class Diffuser:
         shape: tuple,
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
-        ddsp_model: nn.Module,
+        ddsp_decoder: nn.Module,
         loss_fn: nn.Module,
         loss_config,
         split_params_fn: callable,
@@ -1088,7 +1095,6 @@ class Diffuser:
         loudness_score: torch.Tensor | None = None,
         guidance_scale_start: float = 1.0,
         guidance_scale_end: float = 1.0,
-        cfg_guidance_scale: float = 1.0,
         instrument_names: list[int | Instrument] | None = None,
         segment_num: int | None = None,
         num_instruments: int | None = None,
@@ -1124,7 +1130,6 @@ class Diffuser:
             loudness_score: (B, L) - loudness_score
             guidance_scale_start: ガイダンススケールの開始値（最初のtimestepで使用）
             guidance_scale_end: ガイダンススケールの終了値（最後のtimestepで使用）
-            cfg_guidance_scale: CFGのガイダンススケール（1.0でCFG無効、>1.0で条件の影響を強化）
             instrument_names: 楽器名（TDLossやFDLossを使用する場合に必要）
             segment_num: セグメント数（Noneの場合は従来の動作）
             num_instruments: 楽器数（Noneの場合は従来の動作）
@@ -1171,11 +1176,10 @@ class Diffuser:
                 self.optimizer, milestones=[2000, 3000], gamma=0.1
             )
 
+
         for i in range(self.num_timesteps, 0, -1):
-            # ガイダンススケールを線形にスケジューリング
-            # 進行度: 0 (最初のtimestep) -> 1 (最後のtimestep)
             progress = (self.num_timesteps - i) / max(self.num_timesteps - 1, 1)
-            gamma = 4.0  # 2〜4くらいから試す
+            gamma = 4.0
             progress_nl = progress ** gamma
             current_guidance_scale = (
                 guidance_scale_start * (1 - progress_nl) + guidance_scale_end * progress_nl
@@ -1188,7 +1192,7 @@ class Diffuser:
                 t=t,
                 instrument_ids=instrument_ids,
                 f0_score=f0_score,
-                ddsp_model=ddsp_model,
+                ddsp_decoder=ddsp_decoder,
                 loss_fn=loss_fn,
                 loss_config=loss_config,
                 split_params_fn=split_params_fn,
@@ -1205,7 +1209,6 @@ class Diffuser:
                 loudness_original_std=loudness_original_std,
                 loudness_score=loudness_score,
                 guidance_scale=current_guidance_scale,
-                cfg_guidance_scale=cfg_guidance_scale,
                 instrument_names=instrument_names,
                 segment_num=segment_num,
                 num_instruments=num_instruments,

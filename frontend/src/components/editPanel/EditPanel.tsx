@@ -16,14 +16,14 @@ import {
   generateDiffusionParams,
   generateFluidsynthAudio,
 } from '../../api/backend';
-import { INSTRUMENTS, Instrument, TIME_SCALE } from '../../constants/editor';
-import { LoudnessEditor } from '../editors/LoudnessEditor';
-import { NotesPianoRoll } from '../editors/NotesPianoRoll';
-import { PitchEditor } from '../editors/PitchEditor';
+import { INSTRUMENTS, TIME_SCALE } from '../../constants/editor';
 import type { Note } from '../../orval/models/backend-api';
 import { AppMode } from '../../types/appMode';
 import { TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, signalLengthFromDuration } from '../../utils/audio';
+import { LoudnessEditor } from '../editors/LoudnessEditor';
+import { NotesPianoRoll } from '../editors/NotesPianoRoll';
+import { PitchEditor } from '../editors/PitchEditor';
 
 type EditTab = 'pitch' | 'loudness';
 
@@ -35,6 +35,7 @@ interface EditPanelProps {
   setTracks: (tracks: TrackData[]) => void;
   setSelectedTrack: (track: TrackData | null) => void;
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
+  numDenoisingSteps: number;
 }
 
 export const EditPanel = ({
@@ -45,6 +46,7 @@ export const EditPanel = ({
   setTracks,
   setSelectedTrack,
   onTimeLineClick,
+  numDenoisingSteps,
 }: EditPanelProps) => {
   const [editTab, setEditTab] = useState<EditTab>('pitch');
   const [isEditing, setIsEditing] = useState(false);
@@ -55,6 +57,10 @@ export const EditPanel = ({
 
   const isFluidsynth = appMode === 'fluidsynth';
   const showInstrumentSelect = appMode === 'diffusion_ddsp';
+
+  const instrumentOptions = Array.from(
+    new Set([...INSTRUMENTS, ...tracks.map(t => t.instrument)]),
+  );
 
   const getSignalLength = (): number => {
     if (selectedTrack.signalLength) return selectedTrack.signalLength;
@@ -71,6 +77,39 @@ export const EditPanel = ({
     setTracks(newTracks);
     const updated = newTracks.find(t => t.id === trackId);
     if (updated) setSelectedTrack(updated);
+  };
+
+  const regenerateDiffusionTrack = async (notes: Note[]) => {
+    if (!selectedTrack.features) return;
+    const signalLength = getSignalLength();
+    const params = await generateDiffusionParams({
+      notes,
+      instrument_name: selectedTrack.instrument,
+      signal_length: signalLength,
+      num_denoising_steps: numDenoisingSteps,
+    });
+    const wav = await generateDdspAudio(params);
+    updateTrackWav(selectedTrack.id, wav, {
+      features: {
+        ...selectedTrack.features,
+        ...params,
+        notes,
+      },
+      notes,
+      signalLength,
+    });
+  };
+
+  const handleNoteDrop = async (notes: Note[]) => {
+    if (appMode !== 'diffusion_ddsp' || !notes.length) return;
+    setIsRegenerating(true);
+    try {
+      await regenerateDiffusionTrack(notes);
+    } catch (error) {
+      console.error('Note drop regenerate error:', error);
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const handleRegenerate = async () => {
@@ -93,28 +132,23 @@ export const EditPanel = ({
 
       if (!selectedTrack.features) return;
 
-      let params = {
-        pitch: selectedTrack.features.pitch,
-        loudness: selectedTrack.features.loudness,
-        z_feature: selectedTrack.features.z_feature,
-      };
-
       if (appMode === 'diffusion_ddsp') {
         const notes = trackNotes(selectedTrack);
         if (!notes.length) {
           console.error('Notes not found');
           return;
         }
-        params = await generateDiffusionParams({
-          notes,
-          instrument_name: selectedTrack.instrument,
-          signal_length: signalLength,
-        });
+        await regenerateDiffusionTrack(notes);
+        return;
       }
 
-      const wav = await generateDdspAudio(params);
+      const wav = await generateDdspAudio({
+        pitch: selectedTrack.features.pitch,
+        loudness: selectedTrack.features.loudness,
+        z_feature: selectedTrack.features.z_feature,
+      });
       updateTrackWav(selectedTrack.id, wav, {
-        features: { ...selectedTrack.features, ...params },
+        features: selectedTrack.features,
         signalLength,
       });
     } catch (error) {
@@ -129,7 +163,15 @@ export const EditPanel = ({
       const updated: TrackData = { ...selectedTrack, notes };
       setTracks(tracks.map(t => (t.id === selectedTrack.id ? updated : t)));
       setSelectedTrack(updated);
+      return;
     }
+    if (!selectedTrack.features) return;
+    const updated: TrackData = {
+      ...selectedTrack,
+      features: { ...selectedTrack.features, notes },
+    };
+    setTracks(tracks.map(t => (t.id === selectedTrack.id ? updated : t)));
+    setSelectedTrack(updated);
   };
 
   useEffect(() => {
@@ -225,14 +267,14 @@ export const EditPanel = ({
               <Select
                 value={selectedTrack.instrument}
                 onChange={e => {
-                  const instrument = e.target.value as Instrument;
+                  const instrument = e.target.value as typeof INSTRUMENTS[number];
                   const updated = { ...selectedTrack, instrument };
                   setTracks(tracks.map(t => (t.id === selectedTrack.id ? updated : t)));
                   setSelectedTrack(updated);
                 }}
                 sx={{ color: '#fff', bgcolor: '#333', height: 32 }}
               >
-                {INSTRUMENTS.map(inst => (
+                {instrumentOptions.map(inst => (
                   <MenuItem key={inst} value={inst}>
                     {inst.toUpperCase()}
                   </MenuItem>
@@ -281,7 +323,9 @@ export const EditPanel = ({
         {!isFluidsynth && editTab === 'pitch' && (
           <PitchEditor
             {...editorProps}
-            enableNoteEditing={appMode === 'diffusion_ddsp'}
+            enableNoteDrag={appMode === 'diffusion_ddsp' && !isEditing}
+            onNoteDrop={appMode === 'diffusion_ddsp' ? handleNoteDrop : undefined}
+            isBusy={isRegenerating}
           />
         )}
         {!isFluidsynth && editTab === 'loudness' && (

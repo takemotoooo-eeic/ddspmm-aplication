@@ -44,13 +44,12 @@ async def train_fluidsynth(
 
         urmp_instrument_names = parse_instrument_names_from_urmp_filename(wav_file.filename)
         if urmp_instrument_names is not None:
-            if len(urmp_instrument_names) == len(instrument_names):
-                instrument_names = urmp_instrument_names
-            else:
+            if len(urmp_instrument_names) != len(aligned_midi_list):
                 raise BadRequest(
-                    "WAVファイル名から取得した楽器数とMIDIの楽器数が一致しません。"
-                    f" (WAV: {urmp_instrument_names}, MIDI: {len(instrument_names)}件)"
+                    "WAVファイル名から取得した楽器数とアライン済みトラック数が一致しません。"
+                    f" (WAV: {urmp_instrument_names}, tracks: {len(aligned_midi_list)}件)"
                 )
+            instrument_names = urmp_instrument_names
 
         model = FluidSynthModel()
         train_input = FluidSynthTrainInput(

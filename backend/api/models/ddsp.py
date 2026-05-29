@@ -21,6 +21,60 @@ from api.libs.const import MODEL_WEIGHTS_PATH, PRETRAIN_CONFIG_PATH, PREPROCESS_
 
 from .model import DDSP, DDSP_Decoder, Z_Encoder
 
+_ddsp_model: "DDSPModel | None" = None
+_ddsp_decoder: DDSP_Decoder | None = None
+_ddsp_device: torch.device | None = None
+
+
+def _resolve_device() -> torch.device:
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def _load_decoder_weights(decoder: DDSP_Decoder, device: torch.device) -> None:
+    state_dict = torch.load(MODEL_WEIGHTS_PATH, map_location=device)
+    decoder_state = {
+        key[len("decoder.") :]: value
+        for key, value in state_dict.items()
+        if key.startswith("decoder.")
+    }
+    decoder.load_state_dict(decoder_state, strict=False)
+
+
+def get_ddsp_decoder() -> DDSP_Decoder:
+    """Diffusion ガイダンス用。エンコーダなしで decoder のみ GPU に1回だけ載せる。"""
+    global _ddsp_decoder, _ddsp_device, _ddsp_model
+    device = _resolve_device()
+    if _ddsp_model is not None:
+        return _ddsp_model.decoder
+    if _ddsp_decoder is not None and _ddsp_device == device:
+        return _ddsp_decoder
+
+    logger = get_logger()
+    model_config: ModelConfig = ModelConfig.from_config_path(PRETRAIN_CONFIG_PATH)
+    decoder = DDSP_Decoder(
+        hidden_size=model_config.hidden_size,
+        n_harmonic=model_config.n_harmonic,
+        n_bands=model_config.n_bands,
+        sampling_rate=model_config.sampling_rate,
+        block_size=model_config.block_size,
+    ).to(device)
+    _load_decoder_weights(decoder, device)
+    logger.info("DDSP decoder loaded for diffusion guidance")
+    _ddsp_decoder = decoder
+    _ddsp_device = device
+    return decoder
+
+
+def get_ddsp_model() -> "DDSPModel":
+    """DDSP train / generate 用。プロセス内で DDSPModel を1つだけ保持する。"""
+    global _ddsp_model, _ddsp_decoder, _ddsp_device
+    if _ddsp_model is None:
+        _ddsp_model = DDSPModel()
+        _ddsp_decoder = _ddsp_model.decoder
+        _ddsp_device = _ddsp_model.device
+    return _ddsp_model
+
+
 class TrainInput(BaseModel):
     epochs: int = 1000
     lr: float = 0.1
@@ -47,7 +101,7 @@ class DDSPModel:
     ):
         self.logger = get_logger()
         model_config: ModelConfig = ModelConfig.from_config_path(PRETRAIN_CONFIG_PATH)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = _resolve_device()
         self.logger.info(f"device: {self.device}")
         self.model: DDSP = self._load_model(MODEL_WEIGHTS_PATH, self.device, model_config)
         self.logger.info(f"finished load_model")
@@ -84,7 +138,7 @@ class DDSPModel:
         mean_loudness: float,
         std_loudness: float,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        signal_mix, _, loudness_mix = preprocess_wav_file(
+        signal_mix, _, _ = preprocess_wav_file(
             train_input.wav_file, preprocess_config, self.device
         )
         z: torch.Tensor = encoder(signal_mix.unsqueeze(0))
@@ -95,10 +149,10 @@ class DDSPModel:
             loudness: torch.Tensor
             pitch, loudness = convert_midi_to_features(
                 midi=midi,
-                loudness=loudness_mix,
                 sampling_rate=preprocess_config.sampling_rate,
                 signal_length=signal_mix.shape[0],
                 device=self.device,
+                block_size=preprocess_config.block_size,
             )
             z_feature = torch.randn(pitch.shape[0], 16, device=self.device).float()
             output = reshape_to_segments(
@@ -152,7 +206,7 @@ class DDSPModel:
         )
         instrument_names_fixed = ["ob", "vc"]
         loss_fn = Loss(self.device, loss_config, instrument_names_fixed)
-        print(f"epochs: {epochs}")
+        self.logger.info(f"epochs: {epochs}")
 
         pbar = tqdm(range(epochs), desc="Training")
         for epoch in pbar:
@@ -180,45 +234,8 @@ class DDSPModel:
             optimizer.step()
             scheduler.step()
             pbar.set_postfix({"loss": loss.item()})
-            wandb.log({"loss": loss.item()}, step=epoch)
-            if (epoch + 1) % 100 == 0:
-                for i in range(num_instruments):
-                    wandb.log(
-                        {
-                            f"instrument_{i}/generated_audio": wandb.Audio(
-                                signals[i].reshape(-1).detach().cpu().numpy(),
-                                sample_rate=preprocess_config.sampling_rate,
-                            ),
-                        },
-                        step=epoch,
-                    )
-
-        wandb.finish()
 
         loudnesses = loudnesses * std_loudness + mean_loudness
-
-        feature_path = "api/models/ddsp/features/Maria"
-        os.makedirs(feature_path, exist_ok=True)
-        with open(f"{feature_path}/features.jsonl", "w") as f:
-            for i in range(num_instruments):
-                json.dump(
-                        {
-                            "instrument_name": instrument_names[i],
-                            "pitch": pitches[i].reshape(-1).detach().cpu().numpy().tolist(),
-                            "loudness": loudnesses[i].reshape(-1).detach().cpu().numpy().tolist(),
-                            "z_feature": z_features[i].reshape(-1,16).detach().cpu().numpy().tolist(),
-                            "notes": [
-                                {
-                                    "start": note.start,
-                                    "frequency": note.frequency,
-                                    "duration": note.duration,
-                                }
-                                for note in aligned_midi_list[i].notes
-                            ],
-                        },
-                    f,
-                )
-                f.write("\n")
 
         return models.Features(
             features=[
@@ -247,14 +264,6 @@ class DDSPModel:
         loss_config = LossConfig.from_config_path(TRAIN_CONFIG_PATH)
         preprocess_config = PreprocessConfig.from_config_path(PREPROCESS_CONFIG_PATH)
 
-        wandb.init(
-            project="si-ddspmm-sync-api",
-            name="train",
-            config={
-                "train": train_config.model_dump(),
-                "loss": loss_config.model_dump(),
-            },
-        )
         with open(LOUDNESS_PATH, "r") as f:
             loudness_config = json.load(f)
         mean_loudness = loudness_config["mean"]

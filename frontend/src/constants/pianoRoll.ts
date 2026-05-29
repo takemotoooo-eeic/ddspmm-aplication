@@ -16,4 +16,11 @@ export const keys = [
 export const octaves = [6, 5, 4, 3, 2, 1] as const;
 
 export const TOTAL_KEYS = octaves.length * keys.length;
+
+/** 鍵盤最下段 C（例: C1）の MIDI 番号。octaves の最小オクターブに合わせる */
+export const MIDI_MIN = 12 * (octaves[octaves.length - 1] + 1);
+
+/** 鍵盤最上段 B（例: B6）の MIDI 番号 */
+export const MIDI_MAX = 12 * (octaves[0] + 1) + 11;
+
 export const PIANO_ROLL_HEIGHT = TOTAL_KEYS * 30;

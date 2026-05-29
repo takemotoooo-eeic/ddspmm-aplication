@@ -13,11 +13,14 @@ import { ExportButton } from './components/buttons/ExportButton';
 import { AddButton } from './components/buttons/ImportButton';
 import { LoadButton } from './components/buttons/LoadButton';
 import { RefreshButton } from './components/buttons/refreshButton';
+import { SettingsButton } from './components/buttons/SettingsButton';
 import { StartButton } from './components/buttons/StartButton';
 import { StopButton } from './components/buttons/StopButton';
+import { DiffusionSettingsDialog } from './components/dialogs/DiffusionSettingsDialog';
 import { ImportTrackDialog } from './components/dialogs/ImportTrackDialog';
 import { LoadTrackDialog } from './components/dialogs/LoadTrackDialog';
 import { EditPanel } from './components/editPanel/EditPanel';
+import { DEFAULT_NUM_DENOISING_STEPS } from './components/editors/DiffusionSettingsEditor';
 import { ModeSelector } from './components/layout/ModeSelector';
 import { TIME_SCALE } from './constants/editor';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
@@ -54,6 +57,7 @@ export default function App() {
   const [jsonlFile, setJsonlFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
+  const [numDenoisingSteps, setNumDenoisingSteps] = useState(DEFAULT_NUM_DENOISING_STEPS);
 
   const {
     isPlaying,
@@ -70,6 +74,7 @@ export default function App() {
 
   const importDialog = useDisclosure({});
   const loadDialog = useDisclosure({});
+  const settingsDialog = useDisclosure({});
 
   const handleModeChange = (mode: AppMode) => {
     setAppMode(mode);
@@ -115,12 +120,14 @@ export default function App() {
       };
       const wav = await generateDdspAudio(body);
       const blockSize = 512;
+      const notes = data.notes ?? [];
       newTracks.push({
         id: `track-${Date.now()}-${Math.random()}`,
         name: data.instrument_name,
         instrument: data.instrument_name,
         wavData: wav,
-        features: data,
+        features: { ...data, notes },
+        notes,
         signalLength: data.pitch.length * blockSize,
         muted: false,
         volume: 1,
@@ -171,6 +178,9 @@ export default function App() {
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {appMode === 'diffusion_ddsp' && (
+              <SettingsButton onClick={settingsDialog.open} />
+            )}
             <RefreshButton
               onClick={() => {
                 setTracks([]);
@@ -287,6 +297,15 @@ export default function App() {
         />
       )}
 
+      {appMode === 'diffusion_ddsp' && (
+        <DiffusionSettingsDialog
+          open={settingsDialog.isOpen}
+          onClose={settingsDialog.close}
+          numDenoisingSteps={numDenoisingSteps}
+          onNumDenoisingStepsChange={setNumDenoisingSteps}
+        />
+      )}
+
       {selectedTrack && (
         <EditPanel
           appMode={appMode}
@@ -296,6 +315,7 @@ export default function App() {
           setTracks={setTracks}
           setSelectedTrack={setSelectedTrack}
           onTimeLineClick={e => handleTimelineClick(e, true)}
+          numDenoisingSteps={numDenoisingSteps}
         />
       )}
     </ThemeProvider>

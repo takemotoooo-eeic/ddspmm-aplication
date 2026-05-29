@@ -61,7 +61,8 @@ export async function unzipToMap(blob: Blob): Promise<Map<string, Blob>> {
       throw new Error(`Unsupported ZIP compression method: ${compression}`);
     }
 
-    entries.set(name, new Blob([raw]));
+    const type = name.endsWith('.wav') ? 'audio/wav' : undefined;
+    entries.set(name, new Blob([raw], type ? { type } : undefined));
     offset = dataEnd;
   }
 

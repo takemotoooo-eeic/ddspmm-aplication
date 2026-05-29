@@ -1,6 +1,7 @@
-import { TrackData } from '@/types/trackData';
-import { Box } from '@mui/material';
-import { useEffect, useRef } from 'react';
+import { TrackData } from '../../../types/trackData';
+import { downloadWavBlob, safeAudioFilename } from '../../../utils/audio';
+import { Box, Menu, MenuItem } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
 
 interface WaveformDisplayProps {
   wavData: Blob | null;
@@ -22,22 +23,55 @@ export const WaveformDisplay = ({
   setSelectedTrack,
 }: WaveformDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    if (!wavData || wavData.size === 0) return;
+    setMenuPosition({ top: event.clientY, left: event.clientX });
+  };
+
+  const handleDownloadWav = () => {
+    if (!wavData || wavData.size === 0) return;
+    downloadWavBlob(wavData, `${safeAudioFilename(track.name)}.wav`);
+    setMenuPosition(null);
+  };
 
   useEffect(() => {
-    if (!wavData || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const drawPlaceholder = (message: string) => {
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#1e1e1e';
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#666';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(message, 8, height / 2);
+    };
+
+    if (!wavData || wavData.size === 0) {
+      drawPlaceholder('音声データなし');
+      return;
+    }
+
+    let cancelled = false;
 
     const drawWaveform = async () => {
       const audioContext = new AudioContext();
-      const arrayBuffer = await wavData.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      try {
+        const arrayBuffer = await wavData.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+        if (cancelled) return;
 
-      const channelData = audioBuffer.getChannelData(0);
-      const step = Math.ceil(channelData.length / width);
+        const channelData = audioBuffer.getChannelData(0);
+        const step = Math.max(1, Math.ceil(channelData.length / width));
       const amp = height / 2;
 
       // 背景をクリア
@@ -67,50 +101,73 @@ export const WaveformDisplay = ({
       ctx.strokeStyle = '#ffffff'; // 波形を白色に
       ctx.lineWidth = 2; // 線を太くする
 
-      for (let i = 0; i < width; i++) {
-        let min = 1.0;
-        let max = -1.0;
-        for (let j = 0; j < step; j++) {
-          const datum = channelData[i * step + j] * 5;
-          if (datum < min) min = datum;
-          if (datum > max) max = datum;
+        for (let i = 0; i < width; i++) {
+          let min = 1.0;
+          let max = -1.0;
+          for (let j = 0; j < step; j++) {
+            const idx = i * step + j;
+            if (idx >= channelData.length) break;
+            const datum = channelData[idx] * 5;
+            if (datum < min) min = datum;
+            if (datum > max) max = datum;
+          }
+          ctx.moveTo(i, (1 + min) * amp);
+          ctx.lineTo(i, (1 + max) * amp);
         }
-        ctx.moveTo(i, (1 + min) * amp);
-        ctx.lineTo(i, (1 + max) * amp);
+        ctx.stroke();
+
+        ctx.fillStyle = trackColor;
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalAlpha = 1.0;
+      } catch (error) {
+        console.error('Failed to decode WAV for waveform display:', error);
+        if (!cancelled) drawPlaceholder('波形を表示できません');
+      } finally {
+        await audioContext.close();
       }
-      ctx.stroke();
-
-      // 音データの色付きブロックを描画
-      ctx.fillStyle = trackColor;
-      ctx.globalAlpha = 0.3;
-      ctx.fillRect(0, 0, width, height);
-      ctx.globalAlpha = 1.0;
-
     };
 
     drawWaveform();
+
+    return () => {
+      cancelled = true;
+    };
   }, [wavData, height, width, trackColor, showTrackDivider]);
 
   return (
-    <Box
-      sx={{
-        width,
-        height,
-        bgcolor: '#1e1e1e',
-        borderRadius: 1,
-        overflow: 'hidden',
-        borderBottom: '1px solid #333',
-      }}
-      onClick={() => {
-        setSelectedTrack(track);
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        style={{ width: '100%', height: '100%' }}
-      />
-    </Box>
+    <>
+      <Box
+        sx={{
+          width,
+          height,
+          bgcolor: '#1e1e1e',
+          borderRadius: 1,
+          overflow: 'hidden',
+          borderBottom: '1px solid #333',
+        }}
+        onClick={() => {
+          setSelectedTrack(track);
+        }}
+        onContextMenu={handleContextMenu}
+      >
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </Box>
+      <Menu
+        open={menuPosition != null}
+        onClose={() => setMenuPosition(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined
+        }
+      >
+        <MenuItem onClick={handleDownloadWav}>WAVをダウンロード</MenuItem>
+      </Menu>
+    </>
   );
 }; 

@@ -8,6 +8,7 @@ import numpy as np
 import pretty_midi
 import soundfile as sf
 
+from api.libs.instrument import resolve_gm_instrument_code
 from api.libs.note import Note
 
 
@@ -57,7 +58,7 @@ class FluidSynthRenderer:
             self.gm_program_mapping: dict[str, int] = json.load(f)
 
     def get_gm_program(self, instrument_name: str) -> int:
-        code = instrument_name.lower()
+        code = resolve_gm_instrument_code(instrument_name)
         if code not in self.gm_program_mapping:
             raise ValueError(
                 f"Instrument '{instrument_name}' not found in GM mapping. "
@@ -180,6 +181,8 @@ class FluidSynthRenderer:
             f"synth.sample-rate={self.sample_rate}",
             "-o",
             f"audio.sample-format={self.sample_format}",
+            "-T",
+            "wav",
             "-O",
             self.output_format,
             "-F",

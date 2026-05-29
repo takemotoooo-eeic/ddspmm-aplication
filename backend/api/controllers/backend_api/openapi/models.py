@@ -29,6 +29,7 @@ class DiffusionGenerateParams(CustomBaseModel):
     notes: list[Note]
     instrument_name: str
     signal_length: int
+    num_denoising_steps: int | None = None
 
 
 class FluidsynthGenerateParams(CustomBaseModel):

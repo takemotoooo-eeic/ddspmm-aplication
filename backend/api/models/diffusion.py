@@ -1,6 +1,6 @@
 import json
 import os
-
+import time
 import numpy as np
 import torch
 from pydantic import BaseModel
@@ -27,8 +27,9 @@ from api.models.loss import Loss
 
 from api.models.model import Diffuser, get_diffusion_model
 from api.libs.core import normalize, split_params
+from api.libs.instrument import resolve_gm_instrument_code
 
-from .ddsp import DDSPModel
+from .ddsp import get_ddsp_decoder
 
 
 class DiffusionGenerateParams(BaseModel):
@@ -36,6 +37,7 @@ class DiffusionGenerateParams(BaseModel):
     notes: list[Note]  # 音符列
     instrument_name: str  # 楽器名（instrument_mapping.jsonのキー）
     signal_length: int  # 信号長
+    num_denoising_steps: int | None = None  # デノイジング回数（省略時はモデル設定値）
 
 
 class DiffusionTrainInput(BaseModel):
@@ -48,15 +50,14 @@ class DiffusionTrainInput(BaseModel):
 class DiffusionModel:
     """Diffusionモデルを使用して合成パラメータを生成するクラス"""
     
-    def __init__(self, ddsp_model: torch.nn.Module):
+    def __init__(self):
         self.logger = get_logger()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.logger.info(f"device: {self.device}")
-        
-        # モデルを読み込む
+        self.ddsp_decoder: torch.nn.Module | None = None
+
         self._load_model()
         self.logger.info("Finished loading diffusion model")
-        self.ddsp_model = ddsp_model
     
     def _load_model(self):
         """Diffusionモデルと設定を読み込む"""
@@ -182,49 +183,6 @@ class DiffusionModel:
         loudness_scores = loudness_scores[::block_size]
         return f0_scores, loudness_scores
 
-    def _notes_to_score_values(
-        self,
-        notes: list[Note],
-        total_length: int,
-        sampling_rate: int,
-        block_size: int = DEFAULT_BLOCK_SIZE,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        sorted_notes = sorted(notes, key=lambda n: n.start)
-        if len(sorted_notes) == 0:
-            raise ValueError("音符列が空です。")
-
-        mean_frequency = float(np.mean([note.frequency for note in sorted_notes]))
-        f0_scores = np.full(total_length, mean_frequency, dtype=np.float32)
-        loudness_scores = np.full(total_length, URMP_LOUDNESS_SCORE_SILENCE, dtype=np.float32)
-
-        last_frequency = mean_frequency
-        last_end_sample = 0
-
-        for i, note in enumerate(sorted_notes):
-            start_sample = int(note.start * sampling_rate)
-            end_sample = int((note.start + note.duration) * sampling_rate)
-
-            if start_sample < total_length:
-                end_sample = min(end_sample, total_length)
-                if i == 0:
-                    f0_scores[:start_sample] = mean_frequency
-                else:
-                    f0_scores[last_end_sample:start_sample] = last_frequency
-
-                f0_scores[start_sample:end_sample] = note.frequency
-                loudness_scores[start_sample:end_sample] = URMP_LOUDNESS_SCORE_LOUD
-
-                last_frequency = note.frequency
-                last_end_sample = end_sample
-
-        if last_end_sample < total_length:
-            f0_scores[last_end_sample:] = last_frequency
-
-        return (
-            f0_scores[::block_size],
-            loudness_scores[::block_size],
-        )
-
     def _build_training_tensors(
         self,
         train_input: DiffusionTrainInput,
@@ -246,12 +204,13 @@ class DiffusionModel:
         instrument_ids: list[int] = []
 
         for aligned_midi, instrument_name in zip(train_input.midi, train_input.instrument_names):
-            if instrument_name not in self.instrument_mapping:
+            mapping_key = resolve_gm_instrument_code(instrument_name)
+            if mapping_key not in self.instrument_mapping:
                 raise ValueError(
-                    f"Instrument {instrument_name} not found in mapping. "
+                    f"Instrument {instrument_name} (mapping key: {mapping_key}) not found in mapping. "
                     f"Available: {list(self.instrument_mapping.keys())}"
                 )
-            instrument_ids.append(self.instrument_mapping[instrument_name])
+            instrument_ids.append(self.instrument_mapping[mapping_key])
             f0_scores, loudness_scores = self._notes_to_score_values(
                 notes=aligned_midi.notes,
                 total_length=total_length,
@@ -310,14 +269,17 @@ class DiffusionModel:
         loss_fn = Loss(self.device, loss_config)
         self.diffusion_model.eval()
 
+        train_config.enable_guidance = False
         if train_config.enable_guidance:
+            if self.ddsp_decoder is None:
+                self.ddsp_decoder = get_ddsp_decoder()
             self.logger.info("Sampling with DDSP guidance")
             all_params_sampled = self.diffuser.sample_with_guidance(
                 model=self.diffusion_model,
                 shape=(batch_size, L_seg, 18),
                 instrument_ids=tensors["all_instrument_ids"],
                 f0_score=tensors["all_f0_scores_normalized"],
-                ddsp_model=self.ddsp_model,
+                ddsp_decoder=self.ddsp_decoder,
                 loss_fn=loss_fn,
                 loss_config=loss_config,
                 split_params_fn=split_params,
@@ -333,9 +295,8 @@ class DiffusionModel:
                 loudness_original_mean=self.loudness_original_mean,
                 loudness_original_std=self.loudness_original_std,
                 loudness_score=tensors["all_loudness_scores"],
-                guidance_scale_start=train_config.guidance_scale_start or 0.0,
-                guidance_scale_end=train_config.guidance_scale_end or 0.0,
-                cfg_guidance_scale=self.cfg_guidance_scale,
+                guidance_scale_start=train_config.guidance_scale_start,
+                guidance_scale_end=train_config.guidance_scale_end,
                 instrument_names=train_input.instrument_names,
                 segment_num=segment_num,
                 num_instruments=num_instruments,
@@ -350,10 +311,9 @@ class DiffusionModel:
                     shape=(batch_size, L_seg, 18),
                     instrument_ids=tensors["all_instrument_ids"],
                     f0_score=tensors["all_f0_scores_normalized"],
-                    guidance_scale=self.cfg_guidance_scale,
                 )
 
-        all_f0s, _, all_loudnesses, _, all_z_features = split_params(
+        all_f0s, _, _, all_loudness_diff, all_z_features = split_params(
             aggregated=all_params_sampled,
             f0_original_mean=self.f0_original_mean,
             f0_original_std=self.f0_original_std,
@@ -368,6 +328,7 @@ class DiffusionModel:
             loudness_score=tensors["all_loudness_scores"],
             f0_score=tensors["all_f0_scores_normalized"],
         )
+        all_loudness_scores = tensors["all_loudness_scores"]
 
         features: list[models.Feature] = []
         for i in range(num_instruments):
@@ -377,7 +338,9 @@ class DiffusionModel:
             for seg_idx in range(segment_num):
                 batch_idx = i * segment_num + seg_idx
                 instrument_pitches.append(all_f0s[batch_idx])
-                instrument_loudnesses.append(all_loudnesses[batch_idx])
+                instrument_loudnesses.append(
+                    all_loudness_diff[batch_idx] + all_loudness_scores[batch_idx]
+                )
                 instrument_z_features.append(all_z_features[batch_idx])
 
             pitch_cat = torch.cat(instrument_pitches, dim=0)
@@ -410,14 +373,17 @@ class DiffusionModel:
         """
         音符列と楽器IDから合成パラメータを生成
         """
-        if params.instrument_name not in self.instrument_mapping:
+        mapping_key = resolve_gm_instrument_code(params.instrument_name)
+        if mapping_key not in self.instrument_mapping:
             raise ValueError(
-                f"Instrument {params.instrument_name} not found in mapping. "
+                f"Instrument {params.instrument_name} (mapping key: {mapping_key}) not found in mapping. "
                 f"Available: {list(self.instrument_mapping.keys())}"
             )
-        
-        instrument_id = self.instrument_mapping[params.instrument_name]
-        self.logger.info(f"generate: {params.instrument_name} -> id {instrument_id}")
+
+        instrument_id = self.instrument_mapping[mapping_key]
+        self.logger.info(
+            f"generate: {params.instrument_name} -> mapping {mapping_key} -> id {instrument_id}"
+        )
         
         sampling_rate = DEFAULT_SAMPLING_RATE
         block_size = DEFAULT_BLOCK_SIZE
@@ -442,19 +408,34 @@ class DiffusionModel:
         # f0_scoreを正規化
         f0_scores_normalized = normalize(f0_scores_tensor, self.f0_score_mean, self.f0_score_std).float()
         
+        num_denoising_steps = params.num_denoising_steps
+        if num_denoising_steps is not None:
+            max_steps = self.diffusion_model_config.num_timesteps
+            if num_denoising_steps < 1 or num_denoising_steps > max_steps:
+                raise ValueError(
+                    f"num_denoising_steps must be between 1 and {max_steps}, "
+                    f"got {num_denoising_steps}"
+                )
+
         # Diffusion samplingでパラメータを生成
-        self.logger.info(f"Sampling parameters from diffusion model")
+        self.logger.info(
+            f"Sampling parameters from diffusion model "
+            f"(num_denoising_steps={num_denoising_steps or self.diffusion_model_config.num_timesteps})"
+        )
         self.diffusion_model.eval()
+        
+        start_time = time.time()
         with torch.no_grad():
             params_sampled = self.diffuser.sample(
                 model=self.diffusion_model,
                 shape=(1, L_seg, 18),
                 instrument_ids=instrument_ids_tensor,
                 f0_score=f0_scores_normalized,
-                guidance_scale=self.cfg_guidance_scale,
+                num_denoising_steps=num_denoising_steps,
             )  # (1, L_seg, 18)
-        
-        all_f0s, _, all_loudnesses, _, all_z_features = split_params(
+        end_time = time.time()
+        self.logger.info(f"Time taken: {end_time - start_time} seconds")
+        all_f0s, _, all_loudness_normalized, _, all_z_features = split_params(
             aggregated=params_sampled,
             f0_original_mean=self.f0_original_mean,
             f0_original_std=self.f0_original_std,
@@ -467,12 +448,12 @@ class DiffusionModel:
             z_feature_mean=self.z_feature_mean,
             z_feature_std=self.z_feature_std,
             loudness_score=loudness_scores_tensor,
-            f0_score=f0_scores_tensor,
+            f0_score=f0_scores_normalized,
         )
-        
-        # numpyに変換
+        all_loudness: torch.Tensor = all_loudness_normalized * self.loudness_original_std + self.loudness_original_mean
+
         all_f0s_np = all_f0s.squeeze(0).detach().cpu().numpy()  # (L_seg,)
-        all_loudnesses_np = all_loudnesses.squeeze(0).detach().cpu().numpy()  # (L_seg,)
+        all_loudnesses_np = all_loudness.squeeze(0).detach().cpu().numpy()  # (L_seg,)
         all_z_features_np = all_z_features.squeeze(0).detach().cpu().numpy()  # (L_seg, 16)
         
         return {

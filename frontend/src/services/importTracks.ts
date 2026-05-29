@@ -43,12 +43,14 @@ export async function importTracksFromFiles(
   const tracks: TrackData[] = [];
   for (const feature of features.features) {
     const built = await featureToTrack(feature, generateDdspAudio);
+    const notes = built.features.notes ?? [];
     tracks.push({
       id: newTrackId(),
       name: built.name,
       instrument: built.instrument,
       wavData: built.wavData,
-      features: built.features,
+      features: { ...built.features, notes },
+      notes,
       signalLength: built.signalLength,
       muted: false,
       volume: 1,

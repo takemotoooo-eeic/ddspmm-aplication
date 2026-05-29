@@ -73,7 +73,16 @@ class FluidSynthModel:
                 total_duration_sec=total_duration_sec,
             )
             self.logger.info(f"Rendering FluidSynth track: {instrument_name}")
-            wav_bytes = self.renderer.render_midi_bytes(midi_bytes)
+            target_length = int(total_duration_sec * self.output_sample_rate)
+            audio = self.renderer.render_midi_to_samples(
+                midi_bytes,
+                target_length=target_length,
+                target_sample_rate=self.output_sample_rate,
+            )
+            wav_buffer = io.BytesIO()
+            sf.write(wav_buffer, audio, self.output_sample_rate, format="WAV")
+            wav_buffer.seek(0)
+            wav_bytes = wav_buffer.read()
             results.append(
                 FluidSynthTrainResult(
                     instrument_name=instrument_name,
@@ -82,19 +91,31 @@ class FluidSynthModel:
             )
         return results
 
+    @staticmethod
+    def _safe_wav_stem(instrument_name: str) -> str:
+        return "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in instrument_name
+        )
+
     def train_to_zip(self, train_input: FluidSynthTrainInput) -> bytes:
         results = self.train(train_input)
         buffer = io.BytesIO()
         manifest_features = []
+        used_stems: dict[str, int] = {}
         with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
             for item, aligned_midi in zip(results, train_input.aligned_midi_list):
-                safe_name = "".join(
-                    c if c.isalnum() or c in ("-", "_") else "_" for c in item.instrument_name
-                )
-                zf.writestr(f"{safe_name}.wav", item.wav_bytes)
+                base_stem = self._safe_wav_stem(item.instrument_name)
+                if base_stem in used_stems:
+                    used_stems[base_stem] += 1
+                    wav_stem = f"{base_stem}_{used_stems[base_stem]}"
+                else:
+                    used_stems[base_stem] = 0
+                    wav_stem = base_stem
+                zf.writestr(f"{wav_stem}.wav", item.wav_bytes)
                 manifest_features.append(
                     {
                         "instrument_name": item.instrument_name,
+                        "wav_file": f"{wav_stem}.wav",
                         "notes": [
                             {
                                 "start": note.start,

@@ -6,6 +6,7 @@ import {
   LOUDNESS_MIN_DB,
   PIANO_ROLL_KEY_WIDTH,
   PITCH_SAMPLE_RATE,
+  SAMPLE_RATE,
   TIME_SCALE,
 } from '../../constants/editor';
 import { TrackData } from '../../types/trackData';
@@ -26,7 +27,8 @@ interface LoudnessEditorProps {
 
 const dbToY = (db: number): number => {
   const range = LOUDNESS_MAX_DB - LOUDNESS_MIN_DB;
-  return LOUDNESS_EDITOR_HEIGHT - ((db - LOUDNESS_MIN_DB) / range) * LOUDNESS_EDITOR_HEIGHT;
+  const clamped = Math.max(LOUDNESS_MIN_DB, Math.min(LOUDNESS_MAX_DB, db));
+  return LOUDNESS_EDITOR_HEIGHT - ((clamped - LOUDNESS_MIN_DB) / range) * LOUDNESS_EDITOR_HEIGHT;
 };
 
 const yToDb = (y: number): number => {
@@ -53,7 +55,13 @@ export const LoudnessEditor = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const scrollLeftRef = useRef(0);
 
-  const durationSec = tracks.length > 0 ? blobDurationSec(tracks[0].wavData) : 10;
+  const loudnessData = tempLoudness ?? selectedTrack.features?.loudness ?? [];
+  const durationSec =
+    selectedTrack.signalLength != null
+      ? selectedTrack.signalLength / SAMPLE_RATE
+      : loudnessData.length > 0
+        ? loudnessData.length / PITCH_SAMPLE_RATE
+        : blobDurationSec(selectedTrack.wavData);
   const contentWidth = durationToWidth(durationSec, timeScale);
 
   const syncScroll = (scrollLeft: number) => {
@@ -61,8 +69,6 @@ export const LoudnessEditor = ({
     if (timelineRef.current) timelineRef.current.scrollLeft = scrollLeft;
     if (editorRef.current) editorRef.current.scrollLeft = scrollLeft;
   };
-
-  const loudnessData = tempLoudness ?? selectedTrack.features?.loudness ?? [];
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isEditing || !selectedTrack.features) return;
@@ -99,10 +105,11 @@ export const LoudnessEditor = ({
 
   const points = loudnessData
     .map((db, index) => {
+      if (!Number.isFinite(db)) return null;
       const x = (index / PITCH_SAMPLE_RATE) * timeScale;
-      const y = dbToY(db);
-      return `${x},${y}`;
+      return `${x},${dbToY(db)}`;
     })
+    .filter((p): p is string => p != null)
     .join(' ');
 
   return (
@@ -169,7 +176,9 @@ export const LoudnessEditor = ({
                 pointerEvents: 'none',
               }}
             >
-              <polyline points={points} fill="none" stroke="#646cff" strokeWidth={2} />
+              {points.length > 0 && (
+                <polyline points={points} fill="none" stroke="#646cff" strokeWidth={2} />
+              )}
             </svg>
           </Box>
         </Box>

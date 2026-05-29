@@ -168,8 +168,10 @@ class MidiAligner:
         )
 
         aligned_midi_list: list[AlignedMidi] = []
+        aligned_instrument_names: list[str] = []
         for instrument, df_inst in df_annotation.groupby("instrument"):
             self.logger.info(f"Processing instrument: {instrument}")
+            aligned_instrument_names.append(instrument)
 
             df_inst = df_inst.reset_index(drop=True)
             f_chroma_quantized_annotation, f_DLNCO_annotation = (
@@ -235,4 +237,4 @@ class MidiAligner:
                 ]
             )
             aligned_midi_list.append(aligned_midi)
-        return aligned_midi_list, num_instruments, instrument_names
+        return aligned_midi_list, num_instruments, aligned_instrument_names

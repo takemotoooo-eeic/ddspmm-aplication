@@ -4,7 +4,7 @@ train:
   model_dir: results/pretrain/urmp_72h/
   statistics_dir: dataset/pretrain_dataset_urmp_v2/statistics/
   batch_size: 16
-  epochs: 1000
+  epochs: 1
   lr: 0.1
   debug: false
   output_dir: results/ddspmm/20260508/

@@ -24,11 +24,11 @@ def verify_mid_file_format(file: UploadFile) -> None:
 
 def convert_midi_to_features(
     midi: AlignedMidi,
-    loudness: torch.Tensor,
     sampling_rate: int,
     signal_length: int,
     device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    block_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
 
     sorted_notes = sorted(midi.notes, key=lambda n: n.start)
     mean_frequency = np.mean([note.frequency for note in midi.notes])
@@ -63,6 +63,6 @@ def convert_midi_to_features(
         pitch_array[last_end_sample:] = last_frequency
 
     return (
-        torch.from_numpy(pitch_array).float().to(device),
-        loudness.float().to(device),
+        torch.from_numpy(pitch_array).float().to(device)[::block_size],
+        torch.from_numpy(loudness_array).float().to(device)[::block_size],
     )

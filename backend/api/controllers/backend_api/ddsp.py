@@ -8,7 +8,7 @@ from api.libs.exceptions import BadRequest
 from api.libs.instrument import parse_instrument_names_from_urmp_filename
 from api.libs.midi import verify_mid_file_format
 from api.libs.wav import verify_wav_file_format
-from api.models import MidiAligner, TrainInput, DDSPModel
+from api.models import MidiAligner, TrainInput, get_ddsp_model
 
 ddsp_router = APIRouter()
 
@@ -40,7 +40,7 @@ async def train_ddsp(
                     f" (WAV: {urmp_instrument_names}, MIDI: {len(instrument_names)}件)"
                 )
 
-        ddsp_model = DDSPModel()
+        ddsp_model = get_ddsp_model()
         train_input = TrainInput(
             wav_file=wav_file_bytes,
             num_instruments=num_instruments,
@@ -57,7 +57,7 @@ async def train_ddsp(
     response_class=WAVResponse,
 )
 def generate_audio_from_ddsp(params: models.DDSPGenerateParams):
-    ddsp_model = DDSPModel()
+    ddsp_model = get_ddsp_model()
     wav_data: bytes = ddsp_model.generate(
         pitch=params.pitch,
         loudness=params.loudness,

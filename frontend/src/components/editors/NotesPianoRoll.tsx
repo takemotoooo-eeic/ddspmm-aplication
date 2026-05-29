@@ -1,11 +1,12 @@
 import { Box } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { usePianoRollScroll } from '../../hooks/usePianoRollScroll';
 import { NOTE_HEIGHT, PIANO_ROLL_KEY_WIDTH, TIME_SCALE } from '../../constants/editor';
 import { keys, octaves, PIANO_ROLL_HEIGHT } from '../../constants/pianoRoll';
 import type { Note } from '../../orval/models/backend-api';
 import { TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, durationToWidth } from '../../utils/audio';
-import { hzToY, midiToY, yToHz } from '../../utils/pianoRollCoords';
+import { hzToY, midiToRectY, yToHz } from '../../utils/pianoRollCoords';
 import { snapHzToSemitone } from '../../utils/pitch';
 import { PianoRollKeys } from './PianoRollKeys';
 import { EditorTimelineRow } from './shared/EditorTimelineRow';
@@ -38,18 +39,19 @@ export const NotesPianoRoll = ({
 }: NotesPianoRollProps) => {
   const [draggedNoteIndex, setDraggedNoteIndex] = useState<number | null>(null);
   const [tempNotes, setTempNotes] = useState<Note[] | null>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
-  const pianoRollRef = useRef<HTMLDivElement>(null);
-  const scrollLeftRef = useRef(0);
+  const {
+    timelineRef,
+    pianoRollRef,
+    keysRef,
+    scrollLeftRef,
+    scrollTopRef,
+    syncScrollLeft,
+    handlePianoRollScroll,
+    handleKeysScroll,
+  } = usePianoRollScroll();
 
   const durationSec = tracks.length > 0 ? blobDurationSec(tracks[0].wavData) : 10;
   const contentWidth = durationToWidth(durationSec, timeScale);
-
-  const syncScroll = (scrollLeft: number) => {
-    scrollLeftRef.current = scrollLeft;
-    if (timelineRef.current) timelineRef.current.scrollLeft = scrollLeft;
-    if (pianoRollRef.current) pianoRollRef.current.scrollLeft = scrollLeft;
-  };
 
   const commitNotes = (notes: Note[]) => {
     if (onNotesChange) {
@@ -85,7 +87,7 @@ export const NotesPianoRoll = ({
 
     const rect = pianoRollRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left + scrollLeftRef.current;
-    const y = event.clientY - rect.top;
+    const y = event.clientY - rect.top + scrollTopRef.current;
     const note = tempNotes[draggedNoteIndex];
     const newFrequency = yToHz(y);
     const newStart = Math.max(0, (x - (note.duration * timeScale) / 2) / timeScale);
@@ -126,7 +128,8 @@ export const NotesPianoRoll = ({
       onMouseLeave={handleNoteMouseUp}
     >
       {notesToRender.map((note, index) => {
-        const y = midiToY(12 * Math.log2(note.frequency / 440) + 69) - NOTE_HEIGHT / 2;
+        const midi = 12 * Math.log2(note.frequency / 440) + 69;
+        const y = midiToRectY(midi);
         const x = note.start * timeScale;
         const width = note.duration * timeScale;
         const isDragged = draggedNoteIndex === index;
@@ -185,17 +188,20 @@ export const NotesPianoRoll = ({
         timeScale={timeScale}
         onTimeLineClick={onTimeLineClick}
         scrollRef={timelineRef}
-        onScroll={syncScroll}
+        onScroll={syncScrollLeft}
       />
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         <Box
+          ref={keysRef}
           sx={{
             width: PIANO_ROLL_KEY_WIDTH,
             bgcolor: '#222',
             borderRight: '1px solid #333',
             overflowY: 'auto',
+            overflowX: 'hidden',
             flexShrink: 0,
           }}
+          onScroll={handleKeysScroll}
         >
           <PianoRollKeys />
         </Box>
@@ -209,7 +215,7 @@ export const NotesPianoRoll = ({
             overflowY: 'auto',
             minWidth: 0,
           }}
-          onScroll={e => syncScroll(e.currentTarget.scrollLeft)}
+          onScroll={handlePianoRollScroll}
         >
           <Box sx={{ width: contentWidth, height: PIANO_ROLL_HEIGHT, position: 'relative' }}>
             <PlaybackCursor

@@ -51,3 +51,13 @@ def parse_instrument_names_from_urmp_filename(filename: str | None) -> list[str]
             instruments.reverse()
             return instruments
     return None
+
+
+def resolve_gm_instrument_code(instrument_name: str) -> str:
+    """GM マッピング用の楽器コード（fl_1 -> fl）。"""
+    code = instrument_name.lower()
+    if "_" in code:
+        base, suffix = code.rsplit("_", 1)
+        if suffix.isdigit() and base in _URMP_INSTRUMENT_CODES:
+            return base
+    return code

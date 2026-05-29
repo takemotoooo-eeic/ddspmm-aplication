@@ -9,7 +9,7 @@ from api.libs.instrument import parse_instrument_names_from_urmp_filename
 from api.libs.midi import verify_mid_file_format
 from api.libs.note import Note as MidiAlignerNote
 from api.libs.wav import verify_wav_file_format
-from api.models import DiffusionModel, DiffusionGenerateParams, DiffusionTrainInput, DDSPModel, MidiAligner
+from api.models import DiffusionModel, DiffusionGenerateParams, DiffusionTrainInput, MidiAligner
 
 diffusion_router = APIRouter()
 
@@ -44,8 +44,7 @@ async def train_diffusion(
                     f" (WAV: {urmp_instrument_names}, MIDI: {len(instrument_names)}件)"
                 )
 
-        ddsp_model = DDSPModel()
-        diffusion_model = DiffusionModel(ddsp_model=ddsp_model.model)
+        diffusion_model = DiffusionModel()
         train_input = DiffusionTrainInput(
             wav_file=wav_file_bytes,
             num_instruments=num_instruments,
@@ -63,8 +62,7 @@ def generate_params_from_diffusion(params: models.DiffusionGenerateParams):
     音符列と楽器IDから合成パラメータを生成（Diffusionモデルを使用）
     """
     try:
-        ddsp_model = DDSPModel()
-        diffusion_model = DiffusionModel(ddsp_model=ddsp_model.model)
+        diffusion_model = DiffusionModel()
         midi_notes = [
             MidiAlignerNote(
                 start=note.start,
@@ -78,8 +76,9 @@ def generate_params_from_diffusion(params: models.DiffusionGenerateParams):
             notes=midi_notes,
             instrument_name=params.instrument_name,
             signal_length=params.signal_length,
+            num_denoising_steps=params.num_denoising_steps,
         )
-
+        
         result = diffusion_model.generate(diffusion_params)
 
         return models.DDSPGenerateParams(
