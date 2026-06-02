@@ -5,3 +5,7 @@ ddsp/__pycache__
 **/backend.egg-info/
 wandb/
 orval/
+
+# 大容量バイナリ（download_soundfont.sh 等で取得）
+**/*.sf2
+**/*.pth
