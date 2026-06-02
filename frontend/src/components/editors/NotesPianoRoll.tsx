@@ -4,8 +4,8 @@ import { usePianoRollScroll } from '../../hooks/usePianoRollScroll';
 import { NOTE_HEIGHT, PIANO_ROLL_KEY_WIDTH, TIME_SCALE } from '../../constants/editor';
 import { keys, octaves, PIANO_ROLL_HEIGHT } from '../../constants/pianoRoll';
 import type { Note } from '../../orval/models/backend-api';
-import { TrackData, trackNotes } from '../../types/trackData';
-import { blobDurationSec, durationToWidth } from '../../utils/audio';
+import { TrackData, trackNotes, trackDurationSec } from '../../types/trackData';
+import { durationToWidth } from '../../utils/audio';
 import { hzToY, midiToRectY, yToHz } from '../../utils/pianoRollCoords';
 import { snapHzToSemitone } from '../../utils/pitch';
 import { PianoRollKeys } from './PianoRollKeys';
@@ -50,7 +50,7 @@ export const NotesPianoRoll = ({
     handleKeysScroll,
   } = usePianoRollScroll();
 
-  const durationSec = tracks.length > 0 ? blobDurationSec(tracks[0].wavData) : 10;
+  const durationSec = tracks.length > 0 ? trackDurationSec(tracks[0]) : 10;
   const contentWidth = durationToWidth(durationSec, timeScale);
 
   const commitNotes = (notes: Note[]) => {

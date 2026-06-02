@@ -8,7 +8,9 @@ interface WaveformDisplayProps {
   height?: number;
   width?: number;
   trackColor?: string;
+  backgroundColor?: string;
   showTrackDivider?: boolean;
+  selectable?: boolean;
   track: TrackData;
   setSelectedTrack: (track: TrackData) => void;
 }
@@ -18,7 +20,9 @@ export const WaveformDisplay = ({
   height = 60,
   width = 200,
   trackColor = '#646cff',
+  backgroundColor = '#1e1e1e',
   showTrackDivider = true,
+  selectable = true,
   track,
   setSelectedTrack,
 }: WaveformDisplayProps) => {
@@ -48,7 +52,7 @@ export const WaveformDisplay = ({
 
     const drawPlaceholder = (message: string) => {
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = '#1e1e1e';
+      ctx.fillStyle = backgroundColor;
       ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = '#666';
       ctx.font = '12px sans-serif';
@@ -72,34 +76,32 @@ export const WaveformDisplay = ({
 
         const channelData = audioBuffer.getChannelData(0);
         const step = Math.max(1, Math.ceil(channelData.length / width));
-      const amp = height / 2;
+        const amp = height / 2;
 
-      // 背景をクリア
-      ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
 
-      // トラック区切り線を描画
-      if (showTrackDivider) {
+        if (showTrackDivider) {
+          ctx.beginPath();
+          ctx.strokeStyle = '#e0e0e0';
+          ctx.lineWidth = 1;
+          const radius = 8;
+          ctx.moveTo(0.5 + radius, 0.5);
+          ctx.lineTo(width - 0.5 - radius, 0.5);
+          ctx.arcTo(width - 0.5, 0.5, width - 0.5, 0.5 + radius, radius);
+          ctx.lineTo(width - 0.5, height - 0.5 - radius);
+          ctx.arcTo(width - 0.5, height - 0.5, width - 0.5 - radius, height - 0.5, radius);
+          ctx.lineTo(0.5 + radius, height - 0.5);
+          ctx.arcTo(0.5, height - 0.5, 0.5, height - 0.5 - radius, radius);
+          ctx.lineTo(0.5, 0.5 + radius);
+          ctx.arcTo(0.5, 0.5, 0.5 + radius, 0.5, radius);
+          ctx.stroke();
+        }
+
         ctx.beginPath();
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        // 角丸の枠を描画（borderRadius: 8px相当）
-        const radius = 8;
-        ctx.moveTo(0.5 + radius, 0.5);
-        ctx.lineTo(width - 0.5 - radius, 0.5);
-        ctx.arcTo(width - 0.5, 0.5, width - 0.5, 0.5 + radius, radius);
-        ctx.lineTo(width - 0.5, height - 0.5 - radius);
-        ctx.arcTo(width - 0.5, height - 0.5, width - 0.5 - radius, height - 0.5, radius);
-        ctx.lineTo(0.5 + radius, height - 0.5);
-        ctx.arcTo(0.5, height - 0.5, 0.5, height - 0.5 - radius, radius);
-        ctx.lineTo(0.5, 0.5 + radius);
-        ctx.arcTo(0.5, 0.5, 0.5 + radius, 0.5, radius);
-        ctx.stroke();
-      }
-
-      // 波形を描画
-      ctx.beginPath();
-      ctx.strokeStyle = '#ffffff'; // 波形を白色に
-      ctx.lineWidth = 2; // 線を太くする
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
 
         for (let i = 0; i < width; i++) {
           let min = 1.0;
@@ -133,7 +135,7 @@ export const WaveformDisplay = ({
     return () => {
       cancelled = true;
     };
-  }, [wavData, height, width, trackColor, showTrackDivider]);
+  }, [wavData, height, width, trackColor, backgroundColor, showTrackDivider]);
 
   return (
     <>
@@ -141,13 +143,14 @@ export const WaveformDisplay = ({
         sx={{
           width,
           height,
-          bgcolor: '#1e1e1e',
+          bgcolor: backgroundColor,
           borderRadius: 1,
           overflow: 'hidden',
           borderBottom: '1px solid #333',
+          cursor: selectable ? 'pointer' : 'default',
         }}
         onClick={() => {
-          setSelectedTrack(track);
+          if (selectable) setSelectedTrack(track);
         }}
         onContextMenu={handleContextMenu}
       >

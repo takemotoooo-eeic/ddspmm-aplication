@@ -4,16 +4,16 @@ import { useState } from 'react';
 interface LoadTrackDialogProps {
   open: boolean;
   onClose: () => void;
-  jsonlFile: File | null;
-  setJsonlFile: (file: File | null) => void;
+  zipFile: File | null;
+  setZipFile: (file: File | null) => void;
   onLoad: () => Promise<void>;
 }
 
 export const LoadTrackDialog = ({
   open,
   onClose,
-  jsonlFile,
-  setJsonlFile,
+  zipFile,
+  setZipFile,
   onLoad,
 }: LoadTrackDialogProps) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -25,17 +25,17 @@ export const LoadTrackDialog = ({
           LOAD SYNTHESIS PARAMETERS
         </Typography>
         <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-          Select JSONL File
+          Select ZIP File
           <input
             type="file"
-            accept=".jsonl"
+            accept=".zip,application/zip"
             hidden
-            onChange={e => setJsonlFile(e.target.files?.[0] ?? null)}
+            onChange={e => setZipFile(e.target.files?.[0] ?? null)}
           />
         </Button>
-        {jsonlFile && (
+        {zipFile && (
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Selected: {jsonlFile.name}
+            Selected: {zipFile.name}
           </Typography>
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
@@ -53,7 +53,7 @@ export const LoadTrackDialog = ({
                 setIsLoading(false);
               }
             }}
-            disabled={!jsonlFile || isLoading}
+            disabled={!zipFile || isLoading}
           >
             {isLoading ? <CircularProgress size={16} color="inherit" /> : 'Load'}
           </Button>

@@ -7,7 +7,7 @@ import {
   trainFluidsynth,
 } from '../api/backend';
 import { AppMode } from '../types/appMode';
-import { TrackData } from '../types/trackData';
+import { createOriginalTrack, TrackData } from '../types/trackData';
 import { blobDurationSec, signalLengthFromDuration } from '../utils/audio';
 
 const newTrackId = () => `track-${Date.now()}-${Math.random()}`;
@@ -17,10 +17,12 @@ export async function importTracksFromFiles(
   wavFile: File,
   midiFile: File,
 ): Promise<TrackData[]> {
+  const originalTrack = await createOriginalTrack(wavFile);
+
   if (mode === 'fluidsynth') {
     const zipBlob = await trainFluidsynth(wavFile, midiFile);
     const entries = await parseFluidsynthZip(zipBlob);
-    return entries.map(entry => {
+    const separated = entries.map(entry => {
       const duration = blobDurationSec(entry.wavBlob);
       return {
         id: newTrackId(),
@@ -33,6 +35,7 @@ export async function importTracksFromFiles(
         volume: 1,
       };
     });
+    return [originalTrack, ...separated];
   }
 
   const features =
@@ -40,7 +43,7 @@ export async function importTracksFromFiles(
       ? await trainDiffusion(wavFile, midiFile)
       : await trainDdsp(wavFile, midiFile);
 
-  const tracks: TrackData[] = [];
+  const tracks: TrackData[] = [originalTrack];
   for (const feature of features.features) {
     const built = await featureToTrack(feature, generateDdspAudio);
     const notes = built.features.notes ?? [];

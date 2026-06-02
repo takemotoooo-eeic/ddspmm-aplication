@@ -28,12 +28,11 @@ import { useDisclosure } from './hooks/useDisclosure';
 import { Timeline } from './modules/timeLine';
 import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
-import { DDSPGenerateParams } from './orval/models/backend-api';
 import { importTracksFromFiles } from './services/importTracks';
 import { AppMode } from './types/appMode';
-import { supportsParamLoad, TrackData } from './types/trackData';
+import { supportsParamLoad, TrackData, isOriginalTrack } from './types/trackData';
 import { durationToWidth } from './utils/audio';
-import { downloadTracksAsJsonl } from './utils/exportParams';
+import { downloadTracksExport, loadTracksFromExportFile } from './utils/exportParams';
 
 const theme = createTheme({
   palette: {
@@ -54,7 +53,7 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('diffusion_ddsp');
   const [wavFile, setWavFile] = useState<File | null>(null);
   const [midFile, setMidFile] = useState<File | null>(null);
-  const [jsonlFile, setJsonlFile] = useState<File | null>(null);
+  const [zipFile, setZipFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
   const [numDenoisingSteps, setNumDenoisingSteps] = useState(DEFAULT_NUM_DENOISING_STEPS);
@@ -83,9 +82,30 @@ export default function App() {
   };
 
   const handleMuteToggle = (trackId: string) => {
-    setTracks(prev =>
-      prev.map(t => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
-    );
+    setTracks(prev => {
+      const target = prev.find(t => t.id === trackId);
+      if (!target) return prev;
+
+      if (isOriginalTrack(target)) {
+        const willUnmute = target.muted;
+        return prev.map(t => {
+          if (isOriginalTrack(t)) return { ...t, muted: !willUnmute };
+          return { ...t, muted: willUnmute };
+        });
+      }
+
+      const willUnmute = target.muted;
+      return prev.map(t => {
+        if (t.id === trackId) return { ...t, muted: !willUnmute };
+        if (willUnmute && isOriginalTrack(t)) return { ...t, muted: true };
+        return t;
+      });
+    });
+  };
+
+  const handleTrackSelect = (track: TrackData) => {
+    if (isOriginalTrack(track)) return;
+    setSelectedTrack(track);
   };
 
   const handleVolumeChange = (trackId: string, volume: number) => {
@@ -106,35 +126,14 @@ export default function App() {
   };
 
   const handleLoadParams = async () => {
-    if (!jsonlFile) return;
-    const text = await jsonlFile.text();
-    const lines = text.split('\n');
-    const newTracks: TrackData[] = [];
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const data = JSON.parse(line);
-      const body: DDSPGenerateParams = {
-        z_feature: data.z_feature,
-        loudness: data.loudness,
-        pitch: data.pitch,
-      };
-      const wav = await generateDdspAudio(body);
-      const blockSize = 512;
-      const notes = data.notes ?? [];
-      newTracks.push({
-        id: `track-${Date.now()}-${Math.random()}`,
-        name: data.instrument_name,
-        instrument: data.instrument_name,
-        wavData: wav,
-        features: { ...data, notes },
-        notes,
-        signalLength: data.pitch.length * blockSize,
-        muted: false,
-        volume: 1,
-      });
+    if (!zipFile) return;
+    try {
+      const newTracks = await loadTracksFromExportFile(zipFile, generateDdspAudio);
+      setTracks(newTracks);
+    } catch (e) {
+      console.error('Load error:', e);
     }
-    setTracks(newTracks);
-    setJsonlFile(null);
+    setZipFile(null);
     loadDialog.close();
   };
 
@@ -198,7 +197,7 @@ export default function App() {
                     tracks.length === 0 ||
                     !tracks.some(t => t.features != null)
                   }
-                  onClick={() => downloadTracksAsJsonl(tracks)}
+                  onClick={() => downloadTracksExport(tracks)}
                 />
               </>
             )}
@@ -231,7 +230,7 @@ export default function App() {
               key={track.id}
               track={track}
               selected={selectedTrack?.id === track.id}
-              onClick={() => setSelectedTrack(track)}
+              onClick={() => handleTrackSelect(track)}
               onMuteToggle={() => handleMuteToggle(track.id)}
               onVolumeChange={v => handleVolumeChange(track.id, v)}
             />
@@ -268,7 +267,7 @@ export default function App() {
                 key={track.id}
                 track={track}
                 selected={selectedTrack?.id === track.id}
-                setSelectedTrack={setSelectedTrack}
+                setSelectedTrack={handleTrackSelect}
               />
             ))}
           </Box>
@@ -291,8 +290,8 @@ export default function App() {
         <LoadTrackDialog
           open={loadDialog.isOpen}
           onClose={loadDialog.close}
-          jsonlFile={jsonlFile}
-          setJsonlFile={setJsonlFile}
+          zipFile={zipFile}
+          setZipFile={setZipFile}
           onLoad={handleLoadParams}
         />
       )}
@@ -306,7 +305,7 @@ export default function App() {
         />
       )}
 
-      {selectedTrack && (
+      {selectedTrack && !isOriginalTrack(selectedTrack) && (
         <EditPanel
           appMode={appMode}
           currentTime={currentTime}

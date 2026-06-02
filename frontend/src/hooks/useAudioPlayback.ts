@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { blobDurationSec } from '../utils/audio';
+import { trackDurationSec } from '../types/trackData';
 import type { TrackData } from '../types/trackData';
 
 export function useAudioPlayback(tracks: TrackData[]) {
@@ -13,7 +13,7 @@ export function useAudioPlayback(tracks: TrackData[]) {
   const animationFrameRef = useRef<number>(0);
 
   const trackDuration =
-    tracks.length > 0 ? blobDurationSec(tracks[0].wavData) : 0;
+    tracks.length > 0 ? trackDurationSec(tracks[0]) : 0;
 
   const handleStop = useCallback(() => {
     isPlayingRef.current = false;
