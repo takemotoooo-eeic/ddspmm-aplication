@@ -54,6 +54,11 @@ export const EditPanel = ({
   const [isResizing, setIsResizing] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const noteDropRequestIdRef = useRef(0);
+  const tracksRef = useRef(tracks);
+  const selectedTrackRef = useRef(selectedTrack);
+  tracksRef.current = tracks;
+  selectedTrackRef.current = selectedTrack;
 
   const isFluidsynth = appMode === 'fluidsynth';
   const showInstrumentSelect = appMode === 'diffusion_ddsp';
@@ -100,19 +105,67 @@ export const EditPanel = ({
     });
   };
 
-  const handleNoteDrop = async (notes: Note[]) => {
-    if (appMode !== 'diffusion_ddsp' || !notes.length) return;
-    setIsRegenerating(true);
-    try {
-      await regenerateDiffusionTrack(notes);
-    } catch (error) {
-      console.error('Note drop regenerate error:', error);
-    } finally {
-      setIsRegenerating(false);
-    }
+  const handleNoteDrop = (notes: Note[]) => {
+    if (appMode !== 'diffusion_ddsp' || !selectedTrack.features) return;
+
+    const trackId = selectedTrack.id;
+    const notesUpdated: TrackData = {
+      ...selectedTrack,
+      notes,
+      features: { ...selectedTrack.features, notes },
+    };
+    setTracks(tracks.map(t => (t.id === trackId ? notesUpdated : t)));
+    setSelectedTrack(notesUpdated);
+
+    if (!notes.length) return;
+
+    const signalLength = getSignalLength();
+    const instrument = selectedTrack.instrument;
+    const requestId = ++noteDropRequestIdRef.current;
+
+    void (async () => {
+      try {
+        const params = await generateDiffusionParams({
+          notes,
+          instrument_name: instrument,
+          signal_length: signalLength,
+          num_denoising_steps: numDenoisingSteps,
+        });
+        if (requestId !== noteDropRequestIdRef.current) return;
+
+        const wav = await generateDdspAudio(params);
+        if (requestId !== noteDropRequestIdRef.current) return;
+
+        const newTracks = tracksRef.current.map(t =>
+          t.id === trackId && t.features
+            ? {
+                ...t,
+                wavData: wav,
+                features: { ...t.features, ...params, notes },
+                notes,
+                signalLength,
+              }
+            : t,
+        );
+        setTracks(newTracks);
+        const currentSelected = selectedTrackRef.current;
+        if (currentSelected?.id === trackId && currentSelected.features) {
+          setSelectedTrack({
+            ...currentSelected,
+            wavData: wav,
+            features: { ...currentSelected.features, ...params, notes },
+            notes,
+            signalLength,
+          });
+        }
+      } catch (error) {
+        console.error('Note drop regenerate error:', error);
+      }
+    })();
   };
 
   const handleRegenerate = async () => {
+    noteDropRequestIdRef.current += 1;
     setIsRegenerating(true);
     try {
       const signalLength = getSignalLength();
@@ -329,7 +382,7 @@ export const EditPanel = ({
           />
         )}
         {!isFluidsynth && editTab === 'loudness' && (
-          <LoudnessEditor {...editorProps} />
+          <LoudnessEditor {...editorProps} isBusy={isRegenerating} />
         )}
       </Box>
     </Box>

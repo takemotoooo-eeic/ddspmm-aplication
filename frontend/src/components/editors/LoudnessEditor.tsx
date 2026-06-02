@@ -1,4 +1,4 @@
-import { Box } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 import { useRef, useState } from 'react';
 import {
   LOUDNESS_EDITOR_HEIGHT,
@@ -23,6 +23,7 @@ interface LoudnessEditorProps {
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   isEditing: boolean;
   timeScale?: number;
+  isBusy?: boolean;
 }
 
 const dbToY = (db: number): number => {
@@ -48,6 +49,7 @@ export const LoudnessEditor = ({
   onTimeLineClick,
   isEditing,
   timeScale = TIME_SCALE,
+  isBusy = false,
 }: LoudnessEditorProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [tempLoudness, setTempLoudness] = useState<number[] | null>(null);
@@ -71,7 +73,7 @@ export const LoudnessEditor = ({
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isEditing || !selectedTrack.features) return;
+    if (!isEditing || isBusy || !selectedTrack.features) return;
     setIsDragging(true);
     setTempLoudness([...selectedTrack.features.loudness]);
     handleMouseMove(event);
@@ -113,7 +115,22 @@ export const LoudnessEditor = ({
     .join(' ');
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {isBusy && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            bgcolor: 'rgba(0,0,0,0.35)',
+            zIndex: 30,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <CircularProgress size={32} sx={{ color: '#fff' }} />
+        </Box>
+      )}
       <EditorTimelineRow
         durationSec={durationSec}
         contentWidth={contentWidth}
@@ -152,7 +169,9 @@ export const LoudnessEditor = ({
             overflowX: 'auto',
             overflowY: 'hidden',
             height: LOUDNESS_EDITOR_HEIGHT,
-            cursor: isEditing ? 'crosshair' : 'default',
+            cursor: isBusy ? 'wait' : isEditing ? 'crosshair' : 'default',
+            opacity: isBusy ? 0.6 : 1,
+            pointerEvents: isBusy ? 'none' : 'auto',
           }}
           onScroll={e => syncScroll(e.currentTarget.scrollLeft)}
           onMouseDown={handleMouseDown}

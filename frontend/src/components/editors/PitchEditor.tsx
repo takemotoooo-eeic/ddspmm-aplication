@@ -13,6 +13,12 @@ import type { Note } from '../../orval/models/backend-api';
 import { TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, durationToWidth } from '../../utils/audio';
 import {
+  applyMonophonicInsert,
+  buildNoteFromDrag,
+  MIN_NOTE_DURATION_SEC,
+  removeNote,
+} from '../../utils/noteOverlap';
+import {
   buildPitchPolylinePoints,
   noteFrequencyToRectY,
   pitchHzToDisplayY,
@@ -34,8 +40,8 @@ interface PitchEditorProps {
   timeScale?: number;
   /** Edit オフ時: ノートを半音単位でドラッグ可能 */
   enableNoteDrag?: boolean;
-  /** ノートドロップ後に diffusion/generate → feature 更新 */
-  onNoteDrop?: (notes: Note[]) => Promise<void>;
+  /** ノートドロップ後に diffusion/generate → feature 更新（非同期） */
+  onNoteDrop?: (notes: Note[]) => void;
   isBusy?: boolean;
 }
 
@@ -56,7 +62,14 @@ export const PitchEditor = ({
   const [tempPitch, setTempPitch] = useState<number[] | null>(null);
   const [draggedNoteIndex, setDraggedNoteIndex] = useState<number | null>(null);
   const [tempNotes, setTempNotes] = useState<Note[] | null>(null);
+  const [noteDraw, setNoteDraw] = useState<{
+    anchorTime: number;
+    currentTime: number;
+    frequency: number;
+  } | null>(null);
+  const [drawBaseNotes, setDrawBaseNotes] = useState<Note[] | null>(null);
   const noteGrabOffsetXRef = useRef(0);
+  const noteDragMovedRef = useRef(false);
   const {
     timelineRef,
     pianoRollRef,
@@ -79,7 +92,32 @@ export const PitchEditor = ({
         : blobDurationSec(selectedTrack.wavData);
   const contentWidth = durationToWidth(durationSec, timeScale);
 
-  const notesToRender = tempNotes ?? trackNotes(selectedTrack);
+  const notesToRender = (() => {
+    if (noteDraw && drawBaseNotes) {
+      const { start, duration, frequency } = buildNoteFromDrag(
+        noteDraw.anchorTime,
+        noteDraw.currentTime,
+        noteDraw.frequency,
+      );
+      if (duration > 0) {
+        return applyMonophonicInsert(drawBaseNotes, { start, duration, frequency });
+      }
+      return drawBaseNotes;
+    }
+    return tempNotes ?? trackNotes(selectedTrack);
+  })();
+
+  const drawingPreview =
+    noteDraw &&
+    (() => {
+      const { start, duration, frequency } = buildNoteFromDrag(
+        noteDraw.anchorTime,
+        noteDraw.currentTime,
+        noteDraw.frequency,
+      );
+      return { start, duration, frequency };
+    })();
+
   const pitchPolylinePoints = buildPitchPolylinePoints(pitchData, timeScale);
 
   const clientToRollCoords = useCallback(
@@ -102,33 +140,76 @@ export const PitchEditor = ({
       if (!coords) return;
       const note = tempNotes[draggedNoteIndex];
       const newStart = Math.max(0, (coords.x - noteGrabOffsetXRef.current) / timeScale);
+      const newFrequency = yToHz(coords.y);
+      if (newStart !== note.start || newFrequency !== note.frequency) {
+        noteDragMovedRef.current = true;
+      }
       const updated = [...tempNotes];
       updated[draggedNoteIndex] = {
         ...note,
         start: newStart,
-        frequency: yToHz(coords.y),
+        frequency: newFrequency,
       };
       setTempNotes(updated);
     },
     [clientToRollCoords, draggedNoteIndex, tempNotes, timeScale],
   );
 
-  const finishNoteDrag = useCallback(async () => {
+  const finishNoteDrag = useCallback(() => {
     if (draggedNoteIndex === null || !tempNotes) return;
     const notes = tempNotes;
+    if (noteDragMovedRef.current) {
+      onNoteDrop?.(notes);
+    }
     setDraggedNoteIndex(null);
     setTempNotes(null);
-    if (onNoteDrop) {
-      await onNoteDrop(notes);
-    }
+    noteDragMovedRef.current = false;
   }, [draggedNoteIndex, onNoteDrop, tempNotes]);
+
+  const finishNoteDraw = useCallback(() => {
+    if (!noteDraw || !drawBaseNotes) return;
+    const { start, duration, frequency } = buildNoteFromDrag(
+      noteDraw.anchorTime,
+      noteDraw.currentTime,
+      noteDraw.frequency,
+    );
+    setNoteDraw(null);
+    setDrawBaseNotes(null);
+    if (duration < MIN_NOTE_DURATION_SEC) return;
+    const finalNotes = applyMonophonicInsert(drawBaseNotes, { start, duration, frequency });
+    onNoteDrop?.(finalNotes);
+  }, [drawBaseNotes, noteDraw, onNoteDrop]);
+
+  const updateNoteDraw = useCallback(
+    (clientX: number) => {
+      const coords = clientToRollCoords(clientX, 0);
+      if (!coords) return;
+      const currentTime = Math.max(0, coords.x / timeScale);
+      setNoteDraw(prev => (prev ? { ...prev, currentTime } : null));
+    },
+    [clientToRollCoords, timeScale],
+  );
+
+  useEffect(() => {
+    if (!noteDraw || !enableNoteDrag) return;
+
+    const onMove = (e: MouseEvent) => updateNoteDraw(e.clientX);
+    const onUp = () => finishNoteDraw();
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [noteDraw, enableNoteDrag, finishNoteDraw, updateNoteDraw]);
 
   useEffect(() => {
     if (draggedNoteIndex === null || !enableNoteDrag) return;
 
     const onMove = (e: MouseEvent) => updateDraggedNote(e.clientX, e.clientY);
     const onUp = () => {
-      void finishNoteDrag();
+      finishNoteDrag();
     };
 
     document.addEventListener('mousemove', onMove);
@@ -171,8 +252,21 @@ export const PitchEditor = ({
     setSelectedTrack(updated);
   };
 
+  const handlePianoRollBackgroundMouseDown = (event: React.MouseEvent<SVGSVGElement>) => {
+    if (!enableNoteDrag || isEditing || isBusy || noteDraw) return;
+    if (event.target !== event.currentTarget) return;
+
+    const coords = clientToRollCoords(event.clientX, event.clientY);
+    if (!coords) return;
+
+    const anchorTime = Math.max(0, coords.x / timeScale);
+    const frequency = yToHz(coords.y);
+    setDrawBaseNotes([...trackNotes(selectedTrack)]);
+    setNoteDraw({ anchorTime, currentTime: anchorTime, frequency });
+  };
+
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isEditing || draggedNoteIndex !== null || isBusy) return;
+    if (!isEditing || draggedNoteIndex !== null || isBusy || noteDraw) return;
     if (!selectedTrack.features) return;
     const coords = clientToRollCoords(event.clientX, event.clientY);
     if (!coords) return;
@@ -203,7 +297,7 @@ export const PitchEditor = ({
   };
 
   const handleMouseUp = () => {
-    if (draggedNoteIndex !== null) return;
+    if (draggedNoteIndex !== null || noteDraw) return;
 
     if (isDraggingPitch && tempPitch) {
       commitPitch(tempPitch);
@@ -213,23 +307,29 @@ export const PitchEditor = ({
   };
 
   const handleNoteMouseDown = (e: React.MouseEvent<SVGRectElement>, index: number) => {
-    if (!enableNoteDrag || isBusy) return;
+    if (!enableNoteDrag || isBusy || noteDraw) return;
     e.stopPropagation();
     const coords = clientToRollCoords(e.clientX, e.clientY);
     if (!coords) return;
     const notes = [...trackNotes(selectedTrack)];
     noteGrabOffsetXRef.current = coords.x - notes[index].start * timeScale;
+    noteDragMovedRef.current = false;
     setDraggedNoteIndex(index);
     setTempNotes(notes);
   };
 
-  const pianoRollCursor = isBusy
-    ? 'wait'
-    : isEditing
-      ? 'crosshair'
-      : enableNoteDrag
-        ? 'default'
-        : 'default';
+  const handleNoteDoubleClick = (e: React.MouseEvent<SVGRectElement>, note: Note) => {
+    if (!enableNoteDrag || isBusy || noteDraw) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggedNoteIndex(null);
+    setTempNotes(null);
+    noteDragMovedRef.current = false;
+    const notes = removeNote(trackNotes(selectedTrack), note);
+    onNoteDrop?.(notes);
+  };
+
+  const pianoRollCursor = isBusy ? 'wait' : isEditing || enableNoteDrag ? 'crosshair' : 'default';
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -313,7 +413,7 @@ export const PitchEditor = ({
                 )),
               )}
             </Box>
-            {notesToRender.length > 0 && (
+            {enableNoteDrag && (
               <svg
                 width={contentWidth}
                 height={PIANO_ROLL_HEIGHT}
@@ -324,6 +424,81 @@ export const PitchEditor = ({
                   left: 0,
                   zIndex: 1,
                   pointerEvents: enableNoteDrag && !isBusy ? 'all' : 'none',
+                }}
+                onMouseDown={handlePianoRollBackgroundMouseDown}
+              >
+                {notesToRender.map((note, index) => {
+                  const y = noteFrequencyToRectY(note.frequency);
+                  const width = note.duration * timeScale;
+                  if (y == null || width <= 0 || !Number.isFinite(note.start)) return null;
+                  const isNewDrawn =
+                    drawingPreview &&
+                    note.start === drawingPreview.start &&
+                    note.duration === drawingPreview.duration &&
+                    note.frequency === drawingPreview.frequency;
+                  return (
+                    <rect
+                      key={`${index}-${note.start}-${note.frequency}-${note.duration}`}
+                      x={Math.max(0, note.start * timeScale)}
+                      y={y}
+                      width={width}
+                      height={NOTE_HEIGHT}
+                      fill={
+                        isNewDrawn
+                          ? 'rgba(100,255,150,0.45)'
+                          : draggedNoteIndex === index
+                            ? 'rgba(255,215,0,0.5)'
+                            : 'rgba(255,215,0,0.3)'
+                      }
+                      stroke={
+                        isNewDrawn ? 'rgba(100,255,150,0.9)' : 'rgba(255,215,0,0.7)'
+                      }
+                      strokeWidth={draggedNoteIndex === index || isNewDrawn ? 2 : 1}
+                      cursor={
+                        enableNoteDrag && !isBusy && !noteDraw
+                          ? draggedNoteIndex === index
+                            ? 'grabbing'
+                            : 'grab'
+                          : 'default'
+                      }
+                      onMouseDown={e => handleNoteMouseDown(e, index)}
+                      onDoubleClick={e => handleNoteDoubleClick(e, note)}
+                    >
+                      <title>ダブルクリックで削除</title>
+                    </rect>
+                  );
+                })}
+                {drawingPreview && drawingPreview.duration <= 0 && (
+                  (() => {
+                    const y = noteFrequencyToRectY(drawingPreview.frequency);
+                    if (y == null) return null;
+                    return (
+                      <rect
+                        x={drawingPreview.start * timeScale}
+                        y={y}
+                        width={2}
+                        height={NOTE_HEIGHT}
+                        fill="rgba(100,255,150,0.45)"
+                        stroke="rgba(100,255,150,0.9)"
+                        strokeWidth={2}
+                        pointerEvents="none"
+                      />
+                    );
+                  })()
+                )}
+              </svg>
+            )}
+            {!enableNoteDrag && notesToRender.length > 0 && (
+              <svg
+                width={contentWidth}
+                height={PIANO_ROLL_HEIGHT}
+                viewBox={`0 0 ${contentWidth} ${PIANO_ROLL_HEIGHT}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 1,
+                  pointerEvents: 'none',
                 }}
               >
                 {notesToRender.map((note, index) => {
@@ -337,21 +512,9 @@ export const PitchEditor = ({
                       y={y}
                       width={width}
                       height={NOTE_HEIGHT}
-                      fill={
-                        draggedNoteIndex === index
-                          ? 'rgba(255,215,0,0.5)'
-                          : 'rgba(255,215,0,0.3)'
-                      }
+                      fill="rgba(255,215,0,0.3)"
                       stroke="rgba(255,215,0,0.7)"
-                      strokeWidth={draggedNoteIndex === index ? 2 : 1}
-                      cursor={
-                        enableNoteDrag && !isBusy
-                          ? draggedNoteIndex === index
-                            ? 'grabbing'
-                            : 'grab'
-                          : 'default'
-                      }
-                      onMouseDown={e => handleNoteMouseDown(e, index)}
+                      strokeWidth={1}
                     />
                   );
                 })}
