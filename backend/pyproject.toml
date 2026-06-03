@@ -12,27 +12,29 @@ dependencies = [
   "tqdm>=4.67.1",
   "pydantic>=2.11.3",
   "effortless-config>=0.7.0",
-  "torch>=2.6.0",
+  "torch==2.1.0",
+  "torchvision==0.16.0",
+  "torchaudio==2.1.0",
   "pyyaml==5.3.1",
   "flask==1.1.2",
   "numpy>=1.23.5,<2.0.0",
-  "einops==0.3.0",
+  "einops>=0.7.0",
   "soundfile>=0.12.1",
   "crepe==0.0.16",
-  "tensorflow[and-cuda]==2.15.0",
+  "tensorflow==2.15.0",
   "ruff>=0.11.5",
   "python-dotenv>=1.1.0",
   "wandb>=0.19.9",
-  "torchaudio>=2.6.0",
   "synctoolbox>=1.4.0",
   "lxml>=5.4.0",
-  "transformers>=4.52.1",
+  "transformers>=4.31.0,<5.0.0",
   "imblearn>=0.0",
   "uvicorn>=0.34.3",
   "fastapi>=0.115.12",
   "pydantic-settings>=2.9.1",
   "python-multipart>=0.0.20",
-  "diffusers>=0.36.0",
+  "xformers>=0.0.22,<0.0.23",
+  "audiocraft",
 ]
 
 [build-system]
@@ -45,20 +47,34 @@ build-backend = "setuptools.build_meta"
 [dependency-groups]
 dev = [
     "ruff>=0.11.12",
+    "pytest>=8.3.0",
+    "httpx>=0.28.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.setuptools]
 packages = ["api"]
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu124" }
-torchaudio = { index = "pytorch-cu124" }
+torch = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+audiocraft = { git = "https://huggingface.co/spaces/facebook/MelodyFlow", rev = "f8df20b282060a8dc5964140d0b94d2e2078721f" }
 
-# crepe 0.0.16 の setup.py が pkg_resources を参照するため（setuptools 81+ では不可）
+[tool.uv]
+override-dependencies = [
+  "torch==2.1.0",
+  "torchaudio==2.1.0",
+  "torchvision==0.16.0",
+]
+
 [tool.uv.extra-build-dependencies]
 crepe = ["setuptools>=61,<81"]

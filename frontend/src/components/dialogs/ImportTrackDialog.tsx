@@ -9,6 +9,8 @@ interface ImportTrackDialogProps {
   midFile: File | null;
   setMidFile: (file: File | null) => void;
   onImport: () => Promise<void>;
+  /** TTM モードなど MIDI 不要のとき true */
+  wavOnly?: boolean;
 }
 
 export const ImportTrackDialog = ({
@@ -19,6 +21,7 @@ export const ImportTrackDialog = ({
   midFile,
   setMidFile,
   onImport,
+  wavOnly = false,
 }: ImportTrackDialogProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -51,19 +54,23 @@ export const ImportTrackDialog = ({
             Selected: {wavFile.name}
           </Typography>
         )}
-        <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
-          Select MIDI File
-          <input
-            type="file"
-            accept="audio/midi,.mid"
-            hidden
-            onChange={e => setMidFile(e.target.files?.[0] ?? null)}
-          />
-        </Button>
-        {midFile && (
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            Selected: {midFile.name}
-          </Typography>
+        {!wavOnly && (
+          <>
+            <Button component="label" variant="outlined" fullWidth sx={{ mb: 2 }}>
+              Select MIDI File
+              <input
+                type="file"
+                accept="audio/midi,.mid"
+                hidden
+                onChange={e => setMidFile(e.target.files?.[0] ?? null)}
+              />
+            </Button>
+            {midFile && (
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Selected: {midFile.name}
+              </Typography>
+            )}
+          </>
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
           <Button onClick={onClose} disabled={isLoading}>
@@ -73,7 +80,7 @@ export const ImportTrackDialog = ({
             variant="contained"
             sx={{ ml: 2 }}
             onClick={handleImport}
-            disabled={!wavFile || !midFile || isLoading}
+            disabled={!wavFile || (!wavOnly && !midFile) || isLoading}
           >
             {isLoading ? <CircularProgress size={16} color="inherit" /> : 'Import'}
           </Button>

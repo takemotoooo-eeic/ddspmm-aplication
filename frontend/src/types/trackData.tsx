@@ -3,6 +3,7 @@ import { blobDurationSec, wavDurationSec } from '../utils/audio';
 import { AppMode } from './appMode';
 
 export const ORIGINAL_TRACK_NAME = 'original';
+export const EDITED_TRACK_NAME = 'edited';
 
 export interface TrackData {
   id: string;
@@ -25,6 +26,9 @@ export interface TrackData {
 export const isOriginalTrack = (track: TrackData): boolean =>
   track.isOriginal === true || track.name === ORIGINAL_TRACK_NAME;
 
+export const isEditedTrack = (track: TrackData): boolean =>
+  track.name === EDITED_TRACK_NAME;
+
 export const trackDurationSec = (track: TrackData): number =>
   track.durationSec ?? blobDurationSec(track.wavData);
 
@@ -37,6 +41,16 @@ export const createOriginalTrack = async (wavBlob: Blob): Promise<TrackData> => 
   muted: true,
   volume: 1,
   isOriginal: true,
+});
+
+export const createEditedTrack = async (wavBlob: Blob): Promise<TrackData> => ({
+  id: 'edited',
+  name: EDITED_TRACK_NAME,
+  instrument: EDITED_TRACK_NAME,
+  wavData: wavBlob,
+  durationSec: await wavDurationSec(wavBlob),
+  muted: false,
+  volume: 1,
 });
 
 export const trackNotes = (track: TrackData): Note[] =>

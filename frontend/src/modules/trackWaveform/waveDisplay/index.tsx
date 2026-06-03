@@ -1,7 +1,18 @@
+import { Box, Menu, MenuItem } from '@mui/material';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  TTM_EDGE_SCROLL_MARGIN_PX,
+  TTM_EDGE_SCROLL_SPEED_PX,
+} from '../../../constants/editor';
 import { TrackData } from '../../../types/trackData';
 import { downloadWavBlob, safeAudioFilename } from '../../../utils/audio';
-import { Box, Menu, MenuItem } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { normalizeSelection } from '../../../utils/waveformSelection';
+import {
+  applyEdgeScroll,
+  clampTtmSelectionPx,
+  shouldEdgeScroll,
+  waveformXFromClient,
+} from '../../../utils/ttmWaveformDrag';
 
 interface WaveformDisplayProps {
   wavData: Blob | null;
@@ -11,6 +22,14 @@ interface WaveformDisplayProps {
   backgroundColor?: string;
   showTrackDivider?: boolean;
   selectable?: boolean;
+  regionSelectEnabled?: boolean;
+  durationSec?: number;
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
+  onRegionSelected?: (
+    startSec: number,
+    endSec: number,
+    anchor: { top: number; left: number },
+  ) => void;
   track: TrackData;
   setSelectedTrack: (track: TrackData) => void;
 }
@@ -23,13 +42,27 @@ export const WaveformDisplay = ({
   backgroundColor = '#1e1e1e',
   showTrackDivider = true,
   selectable = true,
+  regionSelectEnabled = false,
+  durationSec = 0,
+  scrollContainerRef,
+  onRegionSelected,
   track,
   setSelectedTrack,
 }: WaveformDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragStartPx = useRef<number | null>(null);
+  const lastClientX = useRef<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(
     null,
   );
+  const [selectionPx, setSelectionPx] = useState<{ start: number; end: number } | null>(
+    null,
+  );
+  const [isDragging, setIsDragging] = useState(false);
+
+  const edgeScrollEnabled =
+    regionSelectEnabled && scrollContainerRef != null;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
@@ -42,6 +75,125 @@ export const WaveformDisplay = ({
     downloadWavBlob(wavData, `${safeAudioFilename(track.name)}.wav`);
     setMenuPosition(null);
   };
+
+  const resolveSelectionPx = useCallback(
+    (clientX: number): { start: number; end: number } | null => {
+      if (dragStartPx.current == null || !containerRef.current) return null;
+      let endPx = waveformXFromClient(clientX, containerRef.current, width);
+      let startPx = dragStartPx.current;
+      if (edgeScrollEnabled) {
+        const clamped = clampTtmSelectionPx(startPx, endPx, width, durationSec);
+        endPx = clamped.endPx;
+      }
+      return { start: startPx, end: endPx };
+    },
+    [width, durationSec, edgeScrollEnabled],
+  );
+
+  const updateDragEnd = useCallback(
+    (clientX: number) => {
+      const sel = resolveSelectionPx(clientX);
+      if (sel) setSelectionPx(sel);
+    },
+    [resolveSelectionPx],
+  );
+
+  const finishSelection = useCallback(
+    (clientX: number, clientY: number) => {
+      if (dragStartPx.current == null || !onRegionSelected || !containerRef.current) {
+        return;
+      }
+      const sel = resolveSelectionPx(clientX);
+      if (!sel) return;
+      const { startSec, endSec } = normalizeSelection(
+        sel.start,
+        sel.end,
+        width,
+        durationSec,
+      );
+      dragStartPx.current = null;
+      lastClientX.current = null;
+      setIsDragging(false);
+      setSelectionPx(null);
+      onRegionSelected(startSec, endSec, { top: clientY, left: clientX });
+    },
+    [onRegionSelected, width, durationSec, resolveSelectionPx],
+  );
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!regionSelectEnabled || !onRegionSelected || durationSec <= 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const x = waveformXFromClient(event.clientX, event.currentTarget, width);
+    dragStartPx.current = x;
+    lastClientX.current = event.clientX;
+    setSelectionPx({ start: x, end: x });
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      lastClientX.current = event.clientX;
+      updateDragEnd(event.clientX);
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      finishSelection(event.clientX, event.clientY);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [isDragging, updateDragEnd, finishSelection]);
+
+  useEffect(() => {
+    if (!isDragging || !edgeScrollEnabled) return;
+
+    let rafId = 0;
+    const tick = () => {
+      const scroller = scrollContainerRef?.current;
+      const clientX = lastClientX.current;
+      if (scroller && clientX != null && containerRef.current && dragStartPx.current != null) {
+        const endPx = waveformXFromClient(clientX, containerRef.current, width);
+        if (
+          shouldEdgeScroll(
+            dragStartPx.current,
+            endPx,
+            clientX,
+            scroller,
+            TTM_EDGE_SCROLL_MARGIN_PX,
+            width,
+            durationSec,
+          )
+        ) {
+          const scrolled = applyEdgeScroll(
+            scroller,
+            clientX,
+            TTM_EDGE_SCROLL_MARGIN_PX,
+            TTM_EDGE_SCROLL_SPEED_PX,
+          );
+          if (scrolled) {
+            updateDragEnd(clientX);
+          }
+        } else {
+          updateDragEnd(clientX);
+        }
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isDragging, edgeScrollEnabled, scrollContainerRef, updateDragEnd, width, durationSec]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -60,7 +212,7 @@ export const WaveformDisplay = ({
     };
 
     if (!wavData || wavData.size === 0) {
-      drawPlaceholder('音声データなし');
+      drawPlaceholder('No audio data');
       return;
     }
 
@@ -124,7 +276,7 @@ export const WaveformDisplay = ({
         ctx.globalAlpha = 1.0;
       } catch (error) {
         console.error('Failed to decode WAV for waveform display:', error);
-        if (!cancelled) drawPlaceholder('波形を表示できません');
+        if (!cancelled) drawPlaceholder('Unable to display waveform');
       } finally {
         await audioContext.close();
       }
@@ -137,9 +289,15 @@ export const WaveformDisplay = ({
     };
   }, [wavData, height, width, trackColor, backgroundColor, showTrackDivider]);
 
+  const selLeft = selectionPx ? Math.min(selectionPx.start, selectionPx.end) : 0;
+  const selWidth = selectionPx
+    ? Math.abs(selectionPx.end - selectionPx.start)
+    : 0;
+
   return (
     <>
       <Box
+        ref={containerRef}
         sx={{
           width,
           height,
@@ -147,19 +305,37 @@ export const WaveformDisplay = ({
           borderRadius: 1,
           overflow: 'hidden',
           borderBottom: '1px solid #333',
-          cursor: selectable ? 'pointer' : 'default',
+          cursor: regionSelectEnabled ? 'crosshair' : selectable ? 'pointer' : 'default',
+          position: 'relative',
+          userSelect: 'none',
+          touchAction: 'none',
         }}
         onClick={() => {
-          if (selectable) setSelectedTrack(track);
+          if (!regionSelectEnabled && selectable) setSelectedTrack(track);
         }}
         onContextMenu={handleContextMenu}
+        onPointerDown={handlePointerDown}
       >
         <canvas
           ref={canvasRef}
           width={width}
           height={height}
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
         />
+        {selectionPx && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: selLeft,
+              width: Math.max(selWidth, 2),
+              height: '100%',
+              bgcolor: 'rgba(100, 108, 255, 0.35)',
+              border: '1px solid #646cff',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
       </Box>
       <Menu
         open={menuPosition != null}
@@ -169,8 +345,8 @@ export const WaveformDisplay = ({
           menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined
         }
       >
-        <MenuItem onClick={handleDownloadWav}>WAVをダウンロード</MenuItem>
+        <MenuItem onClick={handleDownloadWav}>Download WAV</MenuItem>
       </Menu>
     </>
   );
-}; 
+};

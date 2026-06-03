@@ -464,7 +464,7 @@ export const PitchEditor = ({
                       onMouseDown={e => handleNoteMouseDown(e, index)}
                       onDoubleClick={e => handleNoteDoubleClick(e, note)}
                     >
-                      <title>ダブルクリックで削除</title>
+                      <title>Double-click to delete</title>
                     </rect>
                   );
                 })}

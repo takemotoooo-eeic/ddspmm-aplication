@@ -7,8 +7,8 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
-import { generateDdspAudio } from './api/backend';
+import { useRef, useState } from 'react';
+import { editMelodyflow, generateDdspAudio } from './api/backend';
 import { ExportButton } from './components/buttons/ExportButton';
 import { AddButton } from './components/buttons/ImportButton';
 import { LoadButton } from './components/buttons/LoadButton';
@@ -19,8 +19,9 @@ import { StopButton } from './components/buttons/StopButton';
 import { DiffusionSettingsDialog } from './components/dialogs/DiffusionSettingsDialog';
 import { ImportTrackDialog } from './components/dialogs/ImportTrackDialog';
 import { LoadTrackDialog } from './components/dialogs/LoadTrackDialog';
-import { EditPanel } from './components/editPanel/EditPanel';
+import { TtmEditDialog } from './components/dialogs/TtmEditDialog';
 import { DEFAULT_NUM_DENOISING_STEPS } from './components/editors/DiffusionSettingsEditor';
+import { EditPanel } from './components/editPanel/EditPanel';
 import { ModeSelector } from './components/layout/ModeSelector';
 import { TIME_SCALE } from './constants/editor';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
@@ -30,8 +31,14 @@ import { TrackSidebar } from './modules/trackSidebar';
 import { TrackRowWaveform } from './modules/trackWaveform';
 import { importTracksFromFiles } from './services/importTracks';
 import { AppMode } from './types/appMode';
-import { supportsParamLoad, TrackData, isOriginalTrack } from './types/trackData';
-import { durationToWidth } from './utils/audio';
+import {
+  EDITED_TRACK_NAME,
+  isEditedTrack,
+  isOriginalTrack,
+  supportsParamLoad,
+  TrackData,
+} from './types/trackData';
+import { durationToWidth, wavDurationSec } from './utils/audio';
 import { downloadTracksExport, loadTracksFromExportFile } from './utils/exportParams';
 
 const theme = createTheme({
@@ -74,11 +81,19 @@ export default function App() {
   const importDialog = useDisclosure({});
   const loadDialog = useDisclosure({});
   const settingsDialog = useDisclosure({});
+  const [ttmDialog, setTtmDialog] = useState<{
+    startSec: number;
+    endSec: number;
+    anchor: { top: number; left: number };
+  } | null>(null);
+  const [ttmLoading, setTtmLoading] = useState(false);
+  const waveformScrollRef = useRef<HTMLDivElement>(null);
 
   const handleModeChange = (mode: AppMode) => {
     setAppMode(mode);
     setTracks([]);
     setSelectedTrack(null);
+    setTtmDialog(null);
   };
 
   const handleMuteToggle = (trackId: string) => {
@@ -113,9 +128,14 @@ export default function App() {
   };
 
   const handleImport = async () => {
-    if (!wavFile || !midFile) return;
+    if (!wavFile) return;
+    if (appMode !== 'ttm' && !midFile) return;
     try {
-      const newTracks = await importTracksFromFiles(appMode, wavFile, midFile);
+      const newTracks = await importTracksFromFiles(
+        appMode,
+        wavFile,
+        midFile ?? undefined,
+      );
       setTracks(newTracks);
     } catch (e) {
       console.error('Import error:', e);
@@ -123,6 +143,44 @@ export default function App() {
     setWavFile(null);
     setMidFile(null);
     importDialog.close();
+  };
+
+  const handleTtmRegionSelected = (
+    _track: TrackData,
+    startSec: number,
+    endSec: number,
+    anchor: { top: number; left: number },
+  ) => {
+    setTtmDialog({ startSec, endSec, anchor });
+  };
+
+  const handleTtmSubmit = async (text: string) => {
+    if (!ttmDialog) return;
+    const editedTrack = tracks.find(isEditedTrack);
+    if (!editedTrack) return;
+    setTtmLoading(true);
+    try {
+      const wavFile = new File([editedTrack.wavData], 'edited.wav', {
+        type: 'audio/wav',
+      });
+      const resultBlob = await editMelodyflow({
+        wavFile,
+        startSec: ttmDialog.startSec,
+        endSec: ttmDialog.endSec,
+        text,
+      });
+      const durationSec = await wavDurationSec(resultBlob);
+      setTracks(prev =>
+        prev.map(t =>
+          t.name === EDITED_TRACK_NAME ? { ...t, wavData: resultBlob, durationSec } : t,
+        ),
+      );
+      setTtmDialog(null);
+    } catch (e) {
+      console.error('TTM edit error:', e);
+    } finally {
+      setTtmLoading(false);
+    }
   };
 
   const handleLoadParams = async () => {
@@ -211,7 +269,7 @@ export default function App() {
 
       <Toolbar />
 
-      <Box sx={{ display: 'flex', height: '100%' }}>
+      <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
         <Box
           sx={{
             width: 280,
@@ -238,29 +296,42 @@ export default function App() {
         </Box>
 
         <Box
+          ref={waveformScrollRef}
           sx={{
             flexGrow: 1,
+            minWidth: 0,
             overflowX: 'auto',
+            overflowY: 'hidden',
             height: 'calc(100vh - 64px)',
             ml: '280px',
             bgcolor: 'background.default',
-            position: 'relative',
           }}
         >
           <Box
+            onClick={e => handleTimelineClick(e)}
             sx={{
-              position: 'absolute',
-              left:
-                trackDuration > 0 ? (currentTime / trackDuration) * waveformWidth : 0,
-              top: 0,
-              height: '100%',
-              width: 2,
-              bgcolor: 'rgba(255,255,255,0.3)',
-              zIndex: 2,
-              pointerEvents: 'none',
+              position: 'relative',
+              cursor: 'pointer',
+              width: waveformWidth,
+              minWidth: waveformWidth,
+              flexShrink: 0,
             }}
-          />
-          <Box onClick={e => handleTimelineClick(e)} sx={{ cursor: 'pointer' }}>
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                left:
+                  trackDuration > 0
+                    ? (currentTime / trackDuration) * waveformWidth
+                    : 0,
+                top: 0,
+                height: '100%',
+                width: 2,
+                bgcolor: 'rgba(255,255,255,0.3)',
+                zIndex: 2,
+                pointerEvents: 'none',
+              }}
+            />
             <Timeline duration={trackDuration || 10} width={waveformWidth} />
             {tracks.map(track => (
               <TrackRowWaveform
@@ -268,6 +339,13 @@ export default function App() {
                 track={track}
                 selected={selectedTrack?.id === track.id}
                 setSelectedTrack={handleTrackSelect}
+                appMode={appMode}
+                scrollContainerRef={
+                  appMode === 'ttm' ? waveformScrollRef : undefined
+                }
+                onRegionSelected={
+                  appMode === 'ttm' ? handleTtmRegionSelected : undefined
+                }
               />
             ))}
           </Box>
@@ -283,6 +361,19 @@ export default function App() {
           midFile={midFile}
           setMidFile={setMidFile}
           onImport={handleImport}
+          wavOnly={appMode === 'ttm'}
+        />
+      )}
+
+      {ttmDialog && (
+        <TtmEditDialog
+          open
+          startSec={ttmDialog.startSec}
+          endSec={ttmDialog.endSec}
+          anchor={ttmDialog.anchor}
+          loading={ttmLoading}
+          onClose={() => !ttmLoading && setTtmDialog(null)}
+          onSubmit={handleTtmSubmit}
         />
       )}
 
@@ -305,7 +396,7 @@ export default function App() {
         />
       )}
 
-      {selectedTrack && !isOriginalTrack(selectedTrack) && (
+      {selectedTrack && !isOriginalTrack(selectedTrack) && appMode !== 'ttm' && (
         <EditPanel
           appMode={appMode}
           currentTime={currentTime}

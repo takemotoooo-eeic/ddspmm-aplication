@@ -97,6 +97,119 @@ bash backend/scripts/download_soundfont.sh
 
 配置先: `backend/api/models/fluidsynth_assets/soundfonts/FluidR3_GM.sf2`
 
+**TTM (MelodyFlow)** 利用時は重みを事前に配置してください（約 4GB）。初回 API 呼び出し時の Hugging Face ダウンロードを避けられます。
+
+配置先（サーバ上）: `backend/api/models/melodyflow_assets/melodyflow-t24-30secs/`  
+必要なファイル: `compression_state_dict.bin`（約 230MB）, `state_dict.bin`（約 3.8GB）
+
+**加えて** MelodyFlow はテキスト条件用 **T5 (`t5-base`)**（約 900MB）が必要です。ログが `T5 will be evaluated with autocast as float32` で止まって見える場合は、この取得待ちです。
+
+T5 は **ホストの `backend/.cache/huggingface`** に落とし、`compose.yaml` が api コンテナの `/root/.cache/huggingface` にマウントします（コンテナ内ダウンロードは不要）。
+
+```bash
+cd ddspmm-aplication
+bash backend/scripts/download_melodyflow_t5.sh
+# 遅い / 認証が必要な場合
+export HF_TOKEN=hf_xxxxxxxx
+bash backend/scripts/download_melodyflow_t5.sh
+docker compose up -d api
+```
+
+別パスに置く場合: `export HF_CACHE_HOST=/path/to/huggingface_cache` のあと `docker compose up -d api`。
+
+#### T5 を手元で落としてサーバへ渡す
+
+```bash
+# 1. 手元（Mac など）で
+cd ddspmm-aplication
+bash backend/scripts/download_melodyflow_t5.sh
+
+# 2. サーバへ転送
+USER=your_user
+HOST=your.server.example
+REMOTE_DIR=/home/sarulab/kengo_takemoto/ddspmm-aplication/backend/.cache/huggingface
+LOCAL_DIR=backend/.cache/huggingface
+
+ssh "${USER}@${HOST}" "mkdir -p ${REMOTE_DIR}"
+rsync -avP "${LOCAL_DIR}/" "${USER}@${HOST}:${REMOTE_DIR}/"
+
+# 3. サーバで確認
+ssh "${USER}@${HOST}" "bash /path/to/ddspmm-aplication/backend/scripts/download_melodyflow_t5.sh"
+# → Already exists と出れば OK
+```
+
+#### 手早い回線のマシンで落として scp で渡す（推奨）
+
+サーバの回線が遅いときは、自宅 PC などで取得してから転送するのが早いです。
+
+**1. 手元（Mac / Linux）でダウンロード**
+
+重みは **Model リポジトリ** [`facebook/melodyflow-t24-30secs`](https://huggingface.co/facebook/melodyflow-t24-30secs/tree/main) にあります。  
+[MelodyFlow Space](https://huggingface.co/spaces/facebook/MelodyFlow)（`audiocraft/__init__.py` など）は **推論用コード** で、`state_dict.bin` は含まれません（`pyproject.toml` の git 依存と同じ中身）。
+
+**おすすめ: 直リンクで `.bin` をそのまま保存**（`.cache` を作らない）
+
+```bash
+mkdir -p melodyflow-t24-30secs && cd melodyflow-t24-30secs
+BASE=https://huggingface.co/facebook/melodyflow-t24-30secs/resolve/main
+
+curl -fL -C - -o compression_state_dict.bin "${BASE}/compression_state_dict.bin"
+curl -fL -C - -o state_dict.bin "${BASE}/state_dict.bin"
+# 遅い場合: curl に -H "Authorization: Bearer $HF_TOKEN" を付ける
+ls -lh *.bin
+```
+
+リポジトリのスクリプトでも同じ URL を使います（`aria2c` があれば並列）:
+
+```bash
+cd ddspmm-aplication
+bash backend/scripts/download_melodyflow_model.sh
+```
+
+`huggingface-cli download --local-dir .` も使えますが、進捗は一旦 `.cache/huggingface/download/*.incomplete` に出ます。**完了後**にカレントへ `compression_state_dict.bin` / `state_dict.bin` が現れます。0% のまま止まる場合は回線か認証の問題です。
+
+**2. サーバへ転送**（`USER` / `HOST` / `REMOTE_DIR` を環境に合わせて変更）
+
+```bash
+USER=your_user
+HOST=your.server.example
+REMOTE_DIR=/home/sarulab/kengo_takemoto/ddspmm-aplication/backend/api/models/melodyflow_assets/melodyflow-t24-30secs
+LOCAL_DIR=backend/api/models/melodyflow_assets/melodyflow-t24-30secs
+
+ssh "${USER}@${HOST}" "mkdir -p ${REMOTE_DIR}"
+
+# rsync（途中で切れても -P で再開しやすい）
+rsync -avP "${LOCAL_DIR}/"*.bin "${USER}@${HOST}:${REMOTE_DIR}/"
+
+# scp でも可
+# scp "${LOCAL_DIR}/"*.bin "${USER}@${HOST}:${REMOTE_DIR}/"
+```
+
+**3. サーバで確認**
+
+```bash
+ssh "${USER}@${HOST}" "ls -lh ${REMOTE_DIR}/*.bin"
+# compression_state_dict.bin が ~200MB 以上、state_dict.bin が ~3.5GB 以上あれば OK
+
+ssh "${USER}@${HOST}" "cd /path/to/ddspmm-aplication && bash backend/scripts/download_melodyflow_model.sh"
+# → Already exists と出れば配置完了
+```
+
+#### サーバ上で直接ダウンロード
+
+```bash
+bash backend/scripts/download_melodyflow_model.sh
+export HF_TOKEN=hf_xxxxxxxx   # 未認証で遅い場合
+bash backend/scripts/download_melodyflow_model.sh
+```
+
+Docker では `compose.yaml` がこのディレクトリをマウントします。別パスに置く場合:
+
+```bash
+export MELODYFLOW_MODEL_HOST=/path/to/melodyflow-t24-30secs
+docker compose up -d api
+```
+
 ### 2. 環境変数
 
 **フロントエンド**（`frontend/.env`）:

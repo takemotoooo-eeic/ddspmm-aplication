@@ -22,10 +22,15 @@ services:
       - "8888:8888"
     volumes:
       - ./backend:/app
+      - ${MELODYFLOW_MODEL_HOST:-./backend/api/models/melodyflow_assets/melodyflow-t24-30secs}:/app/api/models/melodyflow_assets/melodyflow-t24-30secs:ro
+      - ${HF_CACHE_HOST:-./backend/.cache/huggingface}:/root/.cache/huggingface
     environment:
       - PYTHONPATH=/app
       - TF_CPP_MIN_LOG_LEVEL=2
       - TF_ENABLE_ONEDNN_OPTS=0
+      - HF_HOME=/root/.cache/huggingface
+      - HUGGINGFACE_HUB_CACHE=/root/.cache/huggingface/hub
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/hub
     command: uvicorn api.app:app --host 0.0.0.0 --port 8888 --reload
     deploy:
       resources:

@@ -9,3 +9,5 @@ orval/
 # 大容量バイナリ（download_soundfont.sh 等で取得）
 **/*.sf2
 **/*.pth
+**/melodyflow_assets/**/*.bin
+backend/.cache/

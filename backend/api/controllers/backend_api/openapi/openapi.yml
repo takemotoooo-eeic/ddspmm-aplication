@@ -150,6 +150,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /melodyflow/edit:
+    post:
+      summary: Edit Audio With Melodyflow
+      description: 指定区間を MelodyFlow でテキストガイド編集し、全体のWAVを返す。
+      operationId: EditAudioWithMelodyflow
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_edit_melodyflow_melodyflow_edit_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     Note:
@@ -334,6 +359,32 @@ components:
           title: Midi File
           description: MIDIファイル
       title: Body_train_fluidsynth_fluidsynth_train_post
+    Body_edit_melodyflow_melodyflow_edit_post:
+      type: object
+      required:
+        - wav_file
+        - start_sec
+        - end_sec
+        - text
+      properties:
+        wav_file:
+          type: string
+          format: binary
+          title: Wav File
+          description: 編集対象のWAVファイル
+        start_sec:
+          type: number
+          title: Start Sec
+          description: 編集区間の開始秒
+        end_sec:
+          type: number
+          title: End Sec
+          description: 編集区間の終了秒
+        text:
+          type: string
+          title: Text
+          description: テキストプロンプト
+      title: Body_edit_melodyflow_melodyflow_edit_post
     HTTPValidationError:
       type: object
       properties:

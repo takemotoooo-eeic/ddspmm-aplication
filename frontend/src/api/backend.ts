@@ -69,6 +69,26 @@ export async function generateDiffusionParams(
   return data;
 }
 
+export interface MelodyflowEditParams {
+  wavFile: Blob;
+  startSec: number;
+  endSec: number;
+  text: string;
+}
+
+export async function editMelodyflow(params: MelodyflowEditParams): Promise<Blob> {
+  const form = new FormData();
+  form.append('wav_file', params.wavFile, 'audio.wav');
+  form.append('start_sec', String(params.startSec));
+  form.append('end_sec', String(params.endSec));
+  form.append('text', params.text);
+  const { data } = await instance.post<Blob>('/melodyflow/edit', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    responseType: 'blob',
+  });
+  return data;
+}
+
 export async function generateFluidsynthAudio(params: FluidsynthGenerateParams): Promise<Blob> {
   const { data } = await instance.post<Blob>('/fluidsynth/generate', params, {
     responseType: 'blob',

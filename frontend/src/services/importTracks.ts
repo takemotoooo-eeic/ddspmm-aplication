@@ -7,7 +7,7 @@ import {
   trainFluidsynth,
 } from '../api/backend';
 import { AppMode } from '../types/appMode';
-import { createOriginalTrack, TrackData } from '../types/trackData';
+import { createEditedTrack, createOriginalTrack, TrackData } from '../types/trackData';
 import { blobDurationSec, signalLengthFromDuration } from '../utils/audio';
 
 const newTrackId = () => `track-${Date.now()}-${Math.random()}`;
@@ -15,9 +15,19 @@ const newTrackId = () => `track-${Date.now()}-${Math.random()}`;
 export async function importTracksFromFiles(
   mode: AppMode,
   wavFile: File,
-  midiFile: File,
+  midiFile?: File,
 ): Promise<TrackData[]> {
   const originalTrack = await createOriginalTrack(wavFile);
+
+  if (mode === 'ttm') {
+    const editedBlob = new Blob([await wavFile.arrayBuffer()], { type: 'audio/wav' });
+    const editedTrack = await createEditedTrack(editedBlob);
+    return [originalTrack, editedTrack];
+  }
+
+  if (!midiFile) {
+    throw new Error('MIDI file is required for this mode');
+  }
 
   if (mode === 'fluidsynth') {
     const zipBlob = await trainFluidsynth(wavFile, midiFile);

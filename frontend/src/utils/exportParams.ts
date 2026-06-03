@@ -48,7 +48,7 @@ export async function loadTracksFromExportFile(
   generateWav: (params: DDSPGenerateParams) => Promise<Blob>,
 ): Promise<TrackData[]> {
   if (!file.name.toLowerCase().endsWith('.zip')) {
-    throw new Error('ZIP ファイルのみ読み込み可能です');
+    throw new Error('Only ZIP files can be loaded');
   }
 
   const files = await unzipToMap(file);
@@ -56,10 +56,10 @@ export async function loadTracksFromExportFile(
   const originalWav = files.get(EXPORT_ORIGINAL_WAV);
 
   if (!jsonlBlob) {
-    throw new Error(`ZIP内に ${EXPORT_PARAMS_JSONL} が見つかりません`);
+    throw new Error(`${EXPORT_PARAMS_JSONL} not found in ZIP`);
   }
   if (!originalWav || originalWav.size === 0) {
-    throw new Error(`ZIP内に ${EXPORT_ORIGINAL_WAV} が見つかりません`);
+    throw new Error(`${EXPORT_ORIGINAL_WAV} not found in ZIP`);
   }
 
   const tracks: TrackData[] = [await createOriginalTrack(originalWav)];

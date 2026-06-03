@@ -30,8 +30,8 @@ export const DiffusionSettingsEditor = ({
   return (
     <Box sx={{ color: '#fff' }}>
       <Typography variant="body2" sx={{ mb: 3, color: '#aaa' }}>
-        REGENERATE およびノート編集時の /diffusion/generate
-        リクエストで使用するタイムステップ数を設定します。
+        Number of timesteps used for REGENERATE and for /diffusion/generate when
+        editing notes.
       </Typography>
 
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -64,7 +64,7 @@ export const DiffusionSettingsEditor = ({
         />
       </Box>
       <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#888' }}>
-        1〜1000（デフォルト: 1000）。1000 未満の場合は DDIM サンプリングを使用します。
+        Range 1–1000 (default: 1000). Values below 1000 use DDIM sampling.
       </Typography>
     </Box>
   );
