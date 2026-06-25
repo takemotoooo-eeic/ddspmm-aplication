@@ -17,8 +17,10 @@ import { TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, durationToWidth } from '../../utils/audio';
 import {
   applyMonophonicInsert,
+  applyMonophonicMove,
   buildNoteFromDrag,
   MIN_NOTE_DURATION_SEC,
+  notesEqual,
   removeNote,
 } from '../../utils/noteOverlap';
 import {
@@ -31,6 +33,10 @@ import {
 import { PianoRollKeys } from './PianoRollKeys';
 import { EditorTimelineRow } from './shared/EditorTimelineRow';
 import { PlaybackCursor } from './shared/PlaybackCursor';
+
+type NoteDragMode = 'move' | 'resize-start' | 'resize-end';
+
+const NOTE_RESIZE_HANDLE_WIDTH = 6;
 
 interface PitchEditorProps {
   currentTime: number;
@@ -69,6 +75,7 @@ export const PitchEditor = ({
   const [tempPitch, setTempPitch] = useState<number[] | null>(null);
   const [draggedNoteIndex, setDraggedNoteIndex] = useState<number | null>(null);
   const [tempNotes, setTempNotes] = useState<Note[] | null>(null);
+  const [draggedNotePreview, setDraggedNotePreview] = useState<Note | null>(null);
   const [noteDraw, setNoteDraw] = useState<{
     anchorTime: number;
     currentTime: number;
@@ -76,6 +83,8 @@ export const PitchEditor = ({
   } | null>(null);
   const [drawBaseNotes, setDrawBaseNotes] = useState<Note[] | null>(null);
   const noteDragOriginalRef = useRef<Note | null>(null);
+  const noteDragBaseNotesRef = useRef<Note[] | null>(null);
+  const noteDragModeRef = useRef<NoteDragMode>('move');
   const noteGrabOffsetXRef = useRef(0);
   const noteDragMovedRef = useRef(false);
   const {
@@ -143,31 +152,55 @@ export const PitchEditor = ({
 
   const updateDraggedNote = useCallback(
     (clientX: number, clientY: number) => {
-      if (draggedNoteIndex === null || !tempNotes) return;
+      const baseNotes = noteDragBaseNotesRef.current;
+      const originalNote = noteDragOriginalRef.current;
+      if (draggedNoteIndex === null || !baseNotes || !originalNote) return;
       const coords = clientToRollCoords(clientX, clientY);
       if (!coords) return;
-      const note = tempNotes[draggedNoteIndex];
-      const newStart = Math.max(0, (coords.x - noteGrabOffsetXRef.current) / timeScale);
-      const newFrequency = yToHz(coords.y);
-      if (newStart !== note.start || newFrequency !== note.frequency) {
+      const mode = noteDragModeRef.current;
+      const cursorTime = Math.max(0, coords.x / timeScale);
+      const originalEnd = originalNote.start + originalNote.duration;
+      const movedNote =
+        mode === 'resize-start'
+          ? {
+              ...originalNote,
+              start: Math.max(
+                0,
+                Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC),
+              ),
+              duration:
+                originalEnd -
+                Math.max(0, Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC)),
+            }
+          : mode === 'resize-end'
+            ? {
+                ...originalNote,
+                duration: Math.max(MIN_NOTE_DURATION_SEC, cursorTime - originalNote.start),
+              }
+            : {
+                ...originalNote,
+                start: Math.max(0, (coords.x - noteGrabOffsetXRef.current) / timeScale),
+                frequency: yToHz(coords.y),
+              };
+      if (
+        movedNote.start !== originalNote.start ||
+        movedNote.duration !== originalNote.duration ||
+        movedNote.frequency !== originalNote.frequency
+      ) {
         noteDragMovedRef.current = true;
       }
-      const updated = [...tempNotes];
-      updated[draggedNoteIndex] = {
-        ...note,
-        start: newStart,
-        frequency: newFrequency,
-      };
+      const updated = applyMonophonicMove(baseNotes, draggedNoteIndex, movedNote);
+      setDraggedNotePreview(movedNote);
       setTempNotes(updated);
     },
-    [clientToRollCoords, draggedNoteIndex, tempNotes, timeScale],
+    [clientToRollCoords, draggedNoteIndex, timeScale],
   );
 
   const finishNoteDrag = useCallback(() => {
     if (draggedNoteIndex === null || !tempNotes) return;
     const notes = tempNotes;
     if (noteDragMovedRef.current) {
-      const draggedNote = notes[draggedNoteIndex];
+      const draggedNote = draggedNotePreview;
       const originalNote = noteDragOriginalRef.current;
       if (draggedNote && originalNote) {
         const start = Math.min(originalNote.start, draggedNote.start);
@@ -182,9 +215,12 @@ export const PitchEditor = ({
     }
     setDraggedNoteIndex(null);
     setTempNotes(null);
+    setDraggedNotePreview(null);
     noteDragMovedRef.current = false;
     noteDragOriginalRef.current = null;
-  }, [draggedNoteIndex, onNoteDrop, tempNotes]);
+    noteDragBaseNotesRef.current = null;
+    noteDragModeRef.current = 'move';
+  }, [draggedNoteIndex, draggedNotePreview, onNoteDrop, tempNotes]);
 
   const finishNoteDraw = useCallback(() => {
     if (!noteDraw || !drawBaseNotes) return;
@@ -341,7 +377,11 @@ export const PitchEditor = ({
     setTempPitch(null);
   };
 
-  const handleNoteMouseDown = (e: React.MouseEvent<SVGRectElement>, index: number) => {
+  const handleNoteMouseDown = (
+    e: React.MouseEvent<SVGRectElement>,
+    index: number,
+    mode: NoteDragMode = 'move',
+  ) => {
     if (!enableNoteDrag || isBusy || noteDraw) return;
     e.stopPropagation();
     const coords = clientToRollCoords(e.clientX, e.clientY);
@@ -350,6 +390,9 @@ export const PitchEditor = ({
     noteGrabOffsetXRef.current = coords.x - notes[index].start * timeScale;
     noteDragMovedRef.current = false;
     noteDragOriginalRef.current = { ...notes[index] };
+    noteDragBaseNotesRef.current = notes;
+    noteDragModeRef.current = mode;
+    setDraggedNotePreview(notes[index]);
     setDraggedNoteIndex(index);
     setTempNotes(notes);
   };
@@ -360,8 +403,11 @@ export const PitchEditor = ({
     e.preventDefault();
     setDraggedNoteIndex(null);
     setTempNotes(null);
+    setDraggedNotePreview(null);
     noteDragMovedRef.current = false;
     noteDragOriginalRef.current = null;
+    noteDragBaseNotesRef.current = null;
+    noteDragModeRef.current = 'move';
     const notes = removeNote(trackNotes(selectedTrack), note);
     onNoteDrop?.(notes, { start: note.start, end: note.start + note.duration });
   };
@@ -468,41 +514,68 @@ export const PitchEditor = ({
                   const y = noteFrequencyToRectY(note.frequency);
                   const width = note.duration * timeScale;
                   if (y == null || width <= 0 || !Number.isFinite(note.start)) return null;
+                  const isDragged =
+                    draggedNotePreview != null && notesEqual(note, draggedNotePreview);
                   const isNewDrawn =
                     drawingPreview &&
                     note.start === drawingPreview.start &&
                     note.duration === drawingPreview.duration &&
                     note.frequency === drawingPreview.frequency;
+                  const x = Math.max(0, note.start * timeScale);
+                  const handleWidth = Math.min(NOTE_RESIZE_HANDLE_WIDTH, width / 2);
                   return (
-                    <rect
-                      key={`${index}-${note.start}-${note.frequency}-${note.duration}`}
-                      x={Math.max(0, note.start * timeScale)}
-                      y={y}
-                      width={width}
-                      height={NOTE_HEIGHT}
-                      fill={
-                        isNewDrawn
-                          ? 'rgba(100,255,150,0.45)'
-                          : draggedNoteIndex === index
-                            ? 'rgba(255,215,0,0.5)'
-                            : 'rgba(255,215,0,0.3)'
-                      }
-                      stroke={
-                        isNewDrawn ? 'rgba(100,255,150,0.9)' : 'rgba(255,215,0,0.7)'
-                      }
-                      strokeWidth={draggedNoteIndex === index || isNewDrawn ? 2 : 1}
-                      cursor={
-                        enableNoteDrag && !isBusy && !noteDraw
-                          ? draggedNoteIndex === index
-                            ? 'grabbing'
-                            : 'grab'
-                          : 'default'
-                      }
-                      onMouseDown={e => handleNoteMouseDown(e, index)}
-                      onDoubleClick={e => handleNoteDoubleClick(e, note)}
-                    >
-                      <title>Double-click to delete</title>
-                    </rect>
+                    <g key={`${index}-${note.start}-${note.frequency}-${note.duration}`}>
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={NOTE_HEIGHT}
+                        fill={
+                          isNewDrawn
+                            ? 'rgba(100,255,150,0.45)'
+                            : isDragged
+                              ? 'rgba(255,215,0,0.5)'
+                              : 'rgba(255,215,0,0.3)'
+                        }
+                        stroke={
+                          isNewDrawn ? 'rgba(100,255,150,0.9)' : 'rgba(255,215,0,0.7)'
+                        }
+                        strokeWidth={isDragged || isNewDrawn ? 2 : 1}
+                        cursor={
+                          enableNoteDrag && !isBusy && !noteDraw
+                            ? isDragged
+                              ? 'grabbing'
+                              : 'grab'
+                            : 'default'
+                        }
+                        onMouseDown={e => handleNoteMouseDown(e, index)}
+                        onDoubleClick={e => handleNoteDoubleClick(e, note)}
+                      >
+                        <title>Drag to move, drag edges to resize, double-click to delete</title>
+                      </rect>
+                      {handleWidth > 0 && (
+                        <>
+                          <rect
+                            x={x}
+                            y={y}
+                            width={handleWidth}
+                            height={NOTE_HEIGHT}
+                            fill="transparent"
+                            cursor="ew-resize"
+                            onMouseDown={e => handleNoteMouseDown(e, index, 'resize-start')}
+                          />
+                          <rect
+                            x={x + width - handleWidth}
+                            y={y}
+                            width={handleWidth}
+                            height={NOTE_HEIGHT}
+                            fill="transparent"
+                            cursor="ew-resize"
+                            onMouseDown={e => handleNoteMouseDown(e, index, 'resize-end')}
+                          />
+                        </>
+                      )}
+                    </g>
                   );
                 })}
                 {drawingPreview && drawingPreview.duration <= 0 && (

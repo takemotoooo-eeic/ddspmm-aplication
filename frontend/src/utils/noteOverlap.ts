@@ -48,6 +48,19 @@ export const applyMonophonicInsert = (existingNotes: Note[], newNote: Note): Not
   return result.sort((a, b) => a.start - b.start);
 };
 
+export const applyMonophonicMove = (
+  notes: Note[],
+  targetIndex: number,
+  movedNote: Note,
+): Note[] => {
+  if (targetIndex < 0 || targetIndex >= notes.length) return notes;
+  const baseNotes = [
+    ...notes.slice(0, targetIndex),
+    ...notes.slice(targetIndex + 1),
+  ];
+  return applyMonophonicInsert(baseNotes, movedNote);
+};
+
 export const buildNoteFromDrag = (
   anchorTime: number,
   currentTime: number,

@@ -45,6 +45,33 @@ class MidiAligner:
         self.trim_top_db: int = 20
         self.logger = get_logger()
 
+    def _build_non_overlapping_notes(
+        self, out_df: pd.DataFrame, start_sec: float
+    ) -> list[Note]:
+        notes: list[Note] = []
+        previous_end = 0.0
+
+        for _, row in out_df.sort_values("start").iterrows():
+            start = float(row["start"]) + start_sec
+            duration = float(row["duration"])
+            frequency = float(row["frequency"])
+
+            if start < previous_end:
+                overlap = previous_end - start
+                start = previous_end
+                duration = max(0.0, duration - overlap)
+
+            notes.append(
+                Note(
+                    start=start,
+                    frequency=frequency,
+                    duration=duration,
+                )
+            )
+            previous_end = max(previous_end, start + duration)
+
+        return notes
+
     def _convert_midi_to_dataframe(self, midi_file: bytes) -> tuple[pd.DataFrame, list[str]]:
         midi_buffer = BytesIO(midi_file)
         midi_buffer.seek(0)
@@ -227,14 +254,7 @@ class MidiAligner:
 
             out_df = df_annotation_warped[["start", "frequency", "duration"]]
             aligned_midi = AlignedMidi(
-                notes=[
-                    Note(
-                        start=row["start"] + start_sec,
-                        frequency=row["frequency"],
-                        duration=row["duration"],
-                    )
-                    for _, row in out_df.iterrows()
-                ]
+                notes=self._build_non_overlapping_notes(out_df, start_sec)
             )
             aligned_midi_list.append(aligned_midi)
         return aligned_midi_list, num_instruments, aligned_instrument_names

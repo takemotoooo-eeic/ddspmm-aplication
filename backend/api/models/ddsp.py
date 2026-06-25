@@ -138,7 +138,7 @@ class DDSPModel:
         mean_loudness: float,
         std_loudness: float,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        signal_mix, _, _ = preprocess_wav_file(
+        signal_mix = preprocess_wav_file(
             train_input.wav_file, preprocess_config, self.device
         )
         z: torch.Tensor = encoder(signal_mix.unsqueeze(0))

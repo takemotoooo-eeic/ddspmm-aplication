@@ -188,7 +188,7 @@ class DiffusionModel:
         train_input: DiffusionTrainInput,
         preprocess_config: PreprocessConfig,
     ) -> dict:
-        signal_mix, _, _ = preprocess_wav_file(
+        signal_mix = preprocess_wav_file(
             train_input.wav_file, preprocess_config, self.device
         )
         padded_length = (
@@ -269,7 +269,6 @@ class DiffusionModel:
         loss_fn = Loss(self.device, loss_config)
         self.diffusion_model.eval()
 
-        train_config.enable_guidance = False
         if train_config.enable_guidance:
             if self.ddsp_decoder is None:
                 self.ddsp_decoder = get_ddsp_decoder()
