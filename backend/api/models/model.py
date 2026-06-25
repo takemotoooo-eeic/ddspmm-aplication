@@ -685,6 +685,7 @@ class Diffuser:
         t: torch.Tensor,
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
+        prev_t: int | None = None,
     ):
         """
         ノイズ除去（サンプリング時）
@@ -695,6 +696,7 @@ class Diffuser:
             t: (B,) - 時間ステップ (1-indexed)
             instrument_ids: (B,) - 楽器ID
             f0_score: (B, L) - f0スコア
+            prev_t: 遷移先の時間ステップ。Noneの場合は t-1
         Returns:
             x_prev: (B, L, D) - 前のステップのサンプル
         """
@@ -702,15 +704,21 @@ class Diffuser:
         assert (t >= 1).all() and (t <= T).all()
 
         t_idx = t - 1
-        alpha = self.alphas[t_idx]  # (N,)
         alpha_bar = self.alpha_bars[t_idx]  # (N,)
-        beta = self.betas[t_idx]  # (N,)
 
-        # t=1の場合は前のステップがないので、特別処理
-        mask = (t > 1).float()
+        if prev_t is None:
+            prev_t_tensor = torch.clamp(t - 1, min=0)
+        else:
+            prev_t_tensor = torch.full_like(t, prev_t)
+
         alpha_bar_prev = torch.where(
-            t > 1, self.alpha_bars[t_idx - 1], torch.ones_like(alpha_bar)
-        )  # (N,)
+            prev_t_tensor > 0,
+            self.alpha_bars[prev_t_tensor - 1],
+            torch.ones_like(alpha_bar),
+        )
+        alpha = alpha_bar / alpha_bar_prev
+        beta = 1 - alpha
+        mask = (prev_t_tensor > 0).float()
 
         N = alpha.size(0)
         alpha = alpha.view(N, 1, 1)
@@ -724,7 +732,7 @@ class Diffuser:
         # 予測されたノイズから x_0 を推定
         pred_x_0 = (x - torch.sqrt(1 - alpha_bar) * eps) / torch.sqrt(alpha_bar)
 
-        # 前のステップへの遷移
+        # prev_tへのDDPM遷移。prev_t=t-1なら通常の1ステップDDPMと一致する。
         mu = (torch.sqrt(alpha_bar_prev) * beta / (1 - alpha_bar)) * pred_x_0 + (
             torch.sqrt(alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar)
         ) * x
@@ -777,6 +785,7 @@ class Diffuser:
         instrument_ids: torch.Tensor,
         f0_score: torch.Tensor,
         num_denoising_steps: int | None = None,
+        use_ddim: bool | None = None,
     ):
         """
         サンプリング
@@ -787,6 +796,7 @@ class Diffuser:
             instrument_ids: (B,) - 楽器ID
             f0_score: (B, L) - f0スコア
             num_denoising_steps: デノイジング回数（省略時は num_timesteps）
+            use_ddim: DDIMを使うか
         """
         batch_size, _, _ = shape
         x = torch.randn(shape, device=self.device)
@@ -799,7 +809,6 @@ class Diffuser:
             )
 
         timesteps = self._build_sampling_timesteps(max_steps, steps)
-        use_ddim = steps < max_steps
 
         pbar: tqdm = tqdm(
             desc="Sampling (DDIM)" if use_ddim else "Sampling",
@@ -814,11 +823,85 @@ class Diffuser:
                     model, x, t, instrument_ids, f0_score, prev_t=prev_t
                 )
             else:
-                x = self.denoise(model, x, t, instrument_ids, f0_score)
+                x = self.denoise(
+                    model, x, t, instrument_ids, f0_score, prev_t=prev_t
+                )
             pbar.set_postfix({"t": i})
             pbar.update(1)
         pbar.close()
         return x
+
+    def inpaint(
+        self,
+        model: nn.Module,
+        shape: tuple,
+        instrument_ids: torch.Tensor,
+        f0_score: torch.Tensor,
+        mask: torch.Tensor,
+        previous_features: torch.Tensor,
+        num_denoising_steps: int | None = None,
+        use_ddim: bool | None = None,
+    ):
+        """
+        マスクされた範囲のみを再生成するサンプリング。
+
+        Args:
+            mask: (B, L) or (B, L, 1)。1の範囲を再生成し、0の範囲は既存featureを順拡散して固定する。
+            previous_features: (B, L, D)。再生成前の正規化済みfeature。
+        """
+        batch_size, _, _ = shape
+        if previous_features.shape != shape:
+            raise ValueError(
+                f"previous_features shape must match shape: {previous_features.shape} != {shape}"
+            )
+
+        mask = mask.to(device=self.device, dtype=previous_features.dtype)
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(-1)
+        if mask.shape != (batch_size, shape[1], 1):
+            raise ValueError(f"mask shape must be (B, L) or (B, L, 1), got {mask.shape}")
+
+        max_steps = self.num_timesteps
+        steps = num_denoising_steps if num_denoising_steps is not None else max_steps
+        if steps < 1 or steps > max_steps:
+            raise ValueError(
+                f"num_denoising_steps must be between 1 and {max_steps}, got {steps}"
+            )
+
+        timesteps = self._build_sampling_timesteps(max_steps, steps)
+
+        known_x = self._diffuse_or_original(previous_features, timesteps[0])
+        x = mask * torch.randn(shape, device=self.device) + (1 - mask) * known_x
+
+        pbar: tqdm = tqdm(
+            desc="Inpainting (DDIM)" if use_ddim else "Inpainting",
+            total=len(timesteps),
+        )
+
+        for idx, i in enumerate(timesteps):
+            t = torch.tensor([i] * batch_size, device=self.device, dtype=torch.long)
+            prev_t = timesteps[idx + 1] if idx + 1 < len(timesteps) else 0
+            if use_ddim:
+                generated_x = self.denoise_ddim(
+                    model, x, t, instrument_ids, f0_score, prev_t=prev_t
+                )
+            else:
+                generated_x = self.denoise(
+                    model, x, t, instrument_ids, f0_score, prev_t=prev_t
+                )
+
+            known_x = self._diffuse_or_original(previous_features, prev_t)
+            x = mask * generated_x + (1 - mask) * known_x
+            pbar.set_postfix({"t": i})
+            pbar.update(1)
+        pbar.close()
+        return x
+
+    def _diffuse_or_original(self, x_0: torch.Tensor, t: int) -> torch.Tensor:
+        if t == 0:
+            return x_0
+        t = torch.full((x_0.shape[0],), t, device=self.device, dtype=torch.long)
+        return self.add_noise(x_0, t)[0]
 
     def denoise_with_guidance(
         self,

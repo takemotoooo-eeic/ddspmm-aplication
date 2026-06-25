@@ -288,6 +288,36 @@ components:
             - type: integer
             - type: 'null'
           title: Num Denoising Steps
+        use_ddim:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Use Ddim
+        note_operation:
+          anyOf:
+            - type: string
+              enum:
+                - add
+                - delete
+                - move
+                - resize
+            - type: 'null'
+          title: Note Operation
+        operation_prev_note:
+          anyOf:
+            - $ref: '#/components/schemas/Note'
+            - type: 'null'
+          title: Operation Prev Note
+        operation_note:
+          anyOf:
+            - $ref: '#/components/schemas/Note'
+            - type: 'null'
+          title: Operation Note
+        prev_features:
+          anyOf:
+            - $ref: '#/components/schemas/DDSPGenerateParams'
+            - type: 'null'
+          title: Prev Features
       title: DiffusionGenerateParams
     FluidsynthGenerateParams:
       type: object

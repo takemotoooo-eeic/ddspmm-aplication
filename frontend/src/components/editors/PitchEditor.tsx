@@ -1,5 +1,6 @@
 import { Box, CircularProgress } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { NoteOperation, NoteOperationPayload } from '../../api/backend';
 import {
   NOTE_HEIGHT,
   PIANO_ROLL_KEY_WIDTH,
@@ -19,6 +20,7 @@ import {
   applyMonophonicInsert,
   applyMonophonicMove,
   buildNoteFromDrag,
+  MAX_NOTE_DURATION_SEC,
   MIN_NOTE_DURATION_SEC,
   notesEqual,
   removeNote,
@@ -50,7 +52,12 @@ interface PitchEditorProps {
   /** Edit オフ時: ノートを半音単位でドラッグ可能 */
   enableNoteDrag?: boolean;
   /** ノートドロップ後に diffusion/generate → feature 更新（非同期） */
-  onNoteDrop?: (notes: Note[], affectedRangeSec?: { start: number; end: number }) => void;
+  onNoteDrop?: (
+    notes: Note[],
+    operation: NoteOperation,
+    operationPayload: NoteOperationPayload,
+  ) => void;
+  onPitchChange?: (pitch: number[]) => void;
   isBusy?: boolean;
   initialScrollPosition?: PianoRollScrollPosition;
   onScrollPositionChange?: (position: PianoRollScrollPosition) => void;
@@ -67,6 +74,7 @@ export const PitchEditor = ({
   timeScale = TIME_SCALE,
   enableNoteDrag = false,
   onNoteDrop,
+  onPitchChange,
   isBusy = false,
   initialScrollPosition,
   onScrollPositionChange,
@@ -160,22 +168,24 @@ export const PitchEditor = ({
       const mode = noteDragModeRef.current;
       const cursorTime = Math.max(0, coords.x / timeScale);
       const originalEnd = originalNote.start + originalNote.duration;
+      const resizeStart = Math.min(
+        Math.max(cursorTime, Math.max(0, originalEnd - MAX_NOTE_DURATION_SEC)),
+        originalEnd - MIN_NOTE_DURATION_SEC,
+      );
       const movedNote =
         mode === 'resize-start'
           ? {
               ...originalNote,
-              start: Math.max(
-                0,
-                Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC),
-              ),
-              duration:
-                originalEnd -
-                Math.max(0, Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC)),
+              start: resizeStart,
+              duration: originalEnd - resizeStart,
             }
           : mode === 'resize-end'
             ? {
                 ...originalNote,
-                duration: Math.max(MIN_NOTE_DURATION_SEC, cursorTime - originalNote.start),
+                duration: Math.min(
+                  MAX_NOTE_DURATION_SEC,
+                  Math.max(MIN_NOTE_DURATION_SEC, cursorTime - originalNote.start),
+                ),
               }
             : {
                 ...originalNote,
@@ -200,17 +210,17 @@ export const PitchEditor = ({
     if (draggedNoteIndex === null || !tempNotes) return;
     const notes = tempNotes;
     if (noteDragMovedRef.current) {
-      const draggedNote = draggedNotePreview;
       const originalNote = noteDragOriginalRef.current;
-      if (draggedNote && originalNote) {
-        const start = Math.min(originalNote.start, draggedNote.start);
-        const end = Math.max(
-          originalNote.start + originalNote.duration,
-          draggedNote.start + draggedNote.duration,
+      const updatedNote = draggedNotePreview;
+      if (originalNote && updatedNote) {
+        onNoteDrop?.(
+          notes,
+          noteDragModeRef.current === 'move' ? 'move' : 'resize',
+          {
+            operation_prev_note: originalNote,
+            operation_note: updatedNote,
+          },
         );
-        onNoteDrop?.(notes, { start, end });
-      } else {
-        onNoteDrop?.(notes);
       }
     }
     setDraggedNoteIndex(null);
@@ -232,8 +242,9 @@ export const PitchEditor = ({
     setNoteDraw(null);
     setDrawBaseNotes(null);
     if (duration < MIN_NOTE_DURATION_SEC) return;
-    const finalNotes = applyMonophonicInsert(drawBaseNotes, { start, duration, frequency });
-    onNoteDrop?.(finalNotes, { start, end: start + duration });
+    const newNote = { start, duration, frequency };
+    const finalNotes = applyMonophonicInsert(drawBaseNotes, newNote);
+    onNoteDrop?.(finalNotes, 'add', { operation_note: newNote });
   }, [drawBaseNotes, noteDraw, onNoteDrop]);
 
   const updateNoteDraw = useCallback(
@@ -315,6 +326,10 @@ export const PitchEditor = ({
 
   const commitPitch = (pitch: number[]) => {
     if (!selectedTrack.features) return;
+    if (onPitchChange) {
+      onPitchChange(pitch);
+      return;
+    }
     const updated: TrackData = {
       ...selectedTrack,
       features: { ...selectedTrack.features, pitch },
@@ -409,7 +424,7 @@ export const PitchEditor = ({
     noteDragBaseNotesRef.current = null;
     noteDragModeRef.current = 'move';
     const notes = removeNote(trackNotes(selectedTrack), note);
-    onNoteDrop?.(notes, { start: note.start, end: note.start + note.duration });
+    onNoteDrop?.(notes, 'delete', { operation_prev_note: note });
   };
 
   const pianoRollCursor = isBusy ? 'wait' : isEditing || enableNoteDrag ? 'crosshair' : 'default';

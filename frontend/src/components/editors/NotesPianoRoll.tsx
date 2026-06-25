@@ -8,6 +8,7 @@ import { TrackData, trackNotes, trackDurationSec } from '../../types/trackData';
 import { durationToWidth } from '../../utils/audio';
 import {
   applyMonophonicMove,
+  MAX_NOTE_DURATION_SEC,
   MIN_NOTE_DURATION_SEC,
   notesEqual,
 } from '../../utils/noteOverlap';
@@ -112,19 +113,24 @@ export const NotesPianoRoll = ({
     const mode = noteDragModeRef.current;
     const cursorTime = Math.max(0, x / timeScale);
     const originalEnd = originalNote.start + originalNote.duration;
+    const resizeStart = Math.min(
+      Math.max(cursorTime, Math.max(0, originalEnd - MAX_NOTE_DURATION_SEC)),
+      originalEnd - MIN_NOTE_DURATION_SEC,
+    );
     const movedNote =
       mode === 'resize-start'
         ? {
             ...originalNote,
-            start: Math.max(0, Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC)),
-            duration:
-              originalEnd -
-              Math.max(0, Math.min(cursorTime, originalEnd - MIN_NOTE_DURATION_SEC)),
+            start: resizeStart,
+            duration: originalEnd - resizeStart,
           }
         : mode === 'resize-end'
           ? {
               ...originalNote,
-              duration: Math.max(MIN_NOTE_DURATION_SEC, cursorTime - originalNote.start),
+              duration: Math.min(
+                MAX_NOTE_DURATION_SEC,
+                Math.max(MIN_NOTE_DURATION_SEC, cursorTime - originalNote.start),
+              ),
             }
           : {
               ...originalNote,

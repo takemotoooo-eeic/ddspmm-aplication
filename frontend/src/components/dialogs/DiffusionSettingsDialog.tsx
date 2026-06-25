@@ -8,6 +8,8 @@ interface DiffusionSettingsDialogProps {
   onClose: () => void;
   numDenoisingSteps: number;
   onNumDenoisingStepsChange: (value: number) => void;
+  useDdim: boolean;
+  onUseDdimChange: (value: boolean) => void;
 }
 
 export const DiffusionSettingsDialog = ({
@@ -15,6 +17,8 @@ export const DiffusionSettingsDialog = ({
   onClose,
   numDenoisingSteps,
   onNumDenoisingStepsChange,
+  useDdim,
+  onUseDdimChange,
 }: DiffusionSettingsDialogProps) => {
   return (
     <Dialog open={open} onClose={onClose}>
@@ -25,6 +29,8 @@ export const DiffusionSettingsDialog = ({
         <DiffusionSettingsEditor
           numDenoisingSteps={numDenoisingSteps}
           onNumDenoisingStepsChange={onNumDenoisingStepsChange}
+          useDdim={useDdim}
+          onUseDdimChange={onUseDdimChange}
         />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
           <Button variant="contained" onClick={onClose}>

@@ -10,7 +10,19 @@ import { unzipToMap } from '../utils/zip';
 
 export type DiffusionGenerateParams = OrvalDiffusionGenerateParams & {
   num_denoising_steps?: number | null;
+  use_ddim?: boolean | null;
+  note_operation?: NoteOperation | null;
+  operation_prev_note?: Note | null;
+  operation_note?: Note | null;
+  prev_features?: DDSPGenerateParams | null;
 };
+
+export type NoteOperation = 'add' | 'delete' | 'move' | 'resize';
+
+export interface NoteOperationPayload {
+  operation_prev_note?: Note | null;
+  operation_note?: Note | null;
+}
 
 export interface FluidsynthGenerateParams {
   notes: Note[];

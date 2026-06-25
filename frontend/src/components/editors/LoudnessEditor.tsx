@@ -25,6 +25,7 @@ interface LoudnessEditorProps {
   isBusy?: boolean;
   initialScrollLeft?: number;
   onScrollLeftChange?: (scrollLeft: number) => void;
+  onLoudnessChange?: (loudness: number[]) => void;
 }
 
 const DEFAULT_EDITOR_HEIGHT = 480;
@@ -55,6 +56,7 @@ export const LoudnessEditor = ({
   isBusy = false,
   initialScrollLeft,
   onScrollLeftChange,
+  onLoudnessChange,
 }: LoudnessEditorProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [tempLoudness, setTempLoudness] = useState<number[] | null>(null);
@@ -122,6 +124,12 @@ export const LoudnessEditor = ({
 
   const handleMouseUp = () => {
     if (!isDragging || !tempLoudness || !selectedTrack.features) return;
+    if (onLoudnessChange) {
+      onLoudnessChange(tempLoudness);
+      setIsDragging(false);
+      setTempLoudness(null);
+      return;
+    }
     const updatedTrack: TrackData = {
       ...selectedTrack,
       features: { ...selectedTrack.features, loudness: tempLoudness },

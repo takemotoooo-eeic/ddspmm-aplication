@@ -1,6 +1,7 @@
 import type { Note } from '../orval/models/backend-api';
 
 export const MIN_NOTE_DURATION_SEC = 0.05;
+export const MAX_NOTE_DURATION_SEC = 10;
 
 export const notesEqual = (a: Note, b: Note): boolean =>
   a.start === b.start && a.duration === b.duration && a.frequency === b.frequency;
@@ -66,7 +67,11 @@ export const buildNoteFromDrag = (
   currentTime: number,
   frequency: number,
 ): { start: number; duration: number; frequency: number } => {
-  const start = Math.min(anchorTime, currentTime);
-  const end = Math.max(anchorTime, currentTime);
+  const clampedCurrentTime =
+    currentTime >= anchorTime
+      ? Math.min(currentTime, anchorTime + MAX_NOTE_DURATION_SEC)
+      : Math.max(currentTime, anchorTime - MAX_NOTE_DURATION_SEC);
+  const start = Math.min(anchorTime, clampedCurrentTime);
+  const end = Math.max(anchorTime, clampedCurrentTime);
   return { start, duration: end - start, frequency };
 };

@@ -16,8 +16,9 @@ import {
   generateDiffusionParams,
   generateFluidsynthAudio,
 } from '../../api/backend';
+import type { NoteOperation, NoteOperationPayload } from '../../api/backend';
 import { INSTRUMENTS, TIME_SCALE } from '../../constants/editor';
-import type { Note } from '../../orval/models/backend-api';
+import type { Feature, Note } from '../../orval/models/backend-api';
 import { AppMode } from '../../types/appMode';
 import { ORIGINAL_TRACK_NAME, TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, signalLengthFromDuration } from '../../utils/audio';
@@ -32,6 +33,8 @@ type EditorScrollState = {
   pitchTop?: number;
 };
 
+type FeatureParamPatch = Partial<Pick<Feature, 'pitch' | 'loudness' | 'z_feature'>>;
+
 const editorScrollPositions = new Map<string, EditorScrollState>();
 
 interface EditPanelProps {
@@ -43,6 +46,7 @@ interface EditPanelProps {
   setSelectedTrack: (track: TrackData | null) => void;
   onTimeLineClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   numDenoisingSteps: number;
+  useDdim: boolean;
 }
 
 export const EditPanel = ({
@@ -54,6 +58,7 @@ export const EditPanel = ({
   setSelectedTrack,
   onTimeLineClick,
   numDenoisingSteps,
+  useDdim,
 }: EditPanelProps) => {
   const [editTab, setEditTab] = useState<EditTab>('pitch');
   const [isEditing, setIsEditing] = useState(false);
@@ -104,6 +109,7 @@ export const EditPanel = ({
       instrument_name: selectedTrack.instrument,
       signal_length: signalLength,
       num_denoising_steps: numDenoisingSteps,
+      use_ddim: useDdim,
     });
     const wav = await generateDdspAudio(params);
     updateTrackWav(selectedTrack.id, wav, {
@@ -117,10 +123,19 @@ export const EditPanel = ({
     });
   };
 
-  const handleNoteDrop = (notes: Note[]) => {
+  const handleNoteDrop = (
+    notes: Note[],
+    operation: NoteOperation,
+    operationPayload: NoteOperationPayload,
+  ) => {
     if (appMode !== 'diffusion_ddsp' || !selectedTrack.features) return;
 
     const trackId = selectedTrack.id;
+    const prevFeatures = {
+      pitch: selectedTrack.features.pitch,
+      loudness: selectedTrack.features.loudness,
+      z_feature: selectedTrack.features.z_feature,
+    };
     const notesUpdated: TrackData = {
       ...selectedTrack,
       notes,
@@ -142,6 +157,10 @@ export const EditPanel = ({
           instrument_name: instrument,
           signal_length: signalLength,
           num_denoising_steps: numDenoisingSteps,
+          use_ddim: useDdim,
+          note_operation: operation,
+          ...operationPayload,
+          prev_features: prevFeatures,
         });
         if (requestId !== noteDropRequestIdRef.current) return;
 
@@ -172,6 +191,61 @@ export const EditPanel = ({
         }
       } catch (error) {
         console.error('Note drop regenerate error:', error);
+      }
+    })();
+  };
+
+  const handleFeatureParamsChange = (patch: FeatureParamPatch) => {
+    if (!selectedTrack.features) return;
+
+    const trackId = selectedTrack.id;
+    const signalLength = getSignalLength();
+    const updatedFeatures = { ...selectedTrack.features, ...patch };
+    const updatedTrack: TrackData = {
+      ...selectedTrack,
+      features: updatedFeatures,
+      signalLength,
+    };
+    setTracks(tracks.map(t => (t.id === trackId ? updatedTrack : t)));
+    setSelectedTrack(updatedTrack);
+
+    const requestId = ++noteDropRequestIdRef.current;
+    setIsRegenerating(true);
+    void (async () => {
+      try {
+        const wav = await generateDdspAudio({
+          pitch: updatedFeatures.pitch,
+          loudness: updatedFeatures.loudness,
+          z_feature: updatedFeatures.z_feature,
+        });
+        if (requestId !== noteDropRequestIdRef.current) return;
+
+        const newTracks = tracksRef.current.map(t =>
+          t.id === trackId && t.features
+            ? {
+              ...t,
+              wavData: wav,
+              features: updatedFeatures,
+              signalLength,
+            }
+            : t,
+        );
+        setTracks(newTracks);
+        const currentSelected = selectedTrackRef.current;
+        if (currentSelected?.id === trackId && currentSelected.features) {
+          setSelectedTrack({
+            ...currentSelected,
+            wavData: wav,
+            features: updatedFeatures,
+            signalLength,
+          });
+        }
+      } catch (error) {
+        console.error('Direct feature edit regenerate error:', error);
+      } finally {
+        if (requestId === noteDropRequestIdRef.current) {
+          setIsRegenerating(false);
+        }
       }
     })();
   };
@@ -398,6 +472,7 @@ export const EditPanel = ({
             {...editorProps}
             enableNoteDrag={appMode === 'diffusion_ddsp' && !isEditing}
             onNoteDrop={appMode === 'diffusion_ddsp' ? handleNoteDrop : undefined}
+            onPitchChange={pitch => handleFeatureParamsChange({ pitch })}
             isBusy={isRegenerating}
             initialScrollPosition={
               scrollState == null
@@ -414,6 +489,7 @@ export const EditPanel = ({
             {...editorProps}
             isBusy={isRegenerating}
             initialScrollLeft={scrollState?.left}
+            onLoudnessChange={loudness => handleFeatureParamsChange({ loudness })}
             onScrollLeftChange={scrollLeft =>
               updateEditorScrollState({ left: scrollLeft })
             }

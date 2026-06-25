@@ -1,3 +1,5 @@
+from typing import Literal
+
 from api.controllers.common import CustomBaseModel
 
 
@@ -30,6 +32,11 @@ class DiffusionGenerateParams(CustomBaseModel):
     instrument_name: str
     signal_length: int
     num_denoising_steps: int | None = None
+    use_ddim: bool | None = None
+    note_operation: Literal["add", "delete", "move", "resize"] | None = None
+    operation_prev_note: Note | None = None
+    operation_note: Note | None = None
+    prev_features: DDSPGenerateParams | None = None
 
 
 class FluidsynthGenerateParams(CustomBaseModel):

@@ -77,6 +77,19 @@ def generate_params_from_diffusion(params: models.DiffusionGenerateParams):
             instrument_name=params.instrument_name,
             signal_length=params.signal_length,
             num_denoising_steps=params.num_denoising_steps,
+            use_ddim=params.use_ddim,
+            note_operation=params.note_operation,
+            operation_prev_note=MidiAlignerNote(
+                start=params.operation_prev_note.start,
+                frequency=params.operation_prev_note.frequency,
+                duration=params.operation_prev_note.duration,
+            ) if params.operation_prev_note is not None else None,
+            operation_note=MidiAlignerNote(
+                start=params.operation_note.start,
+                frequency=params.operation_note.frequency,
+                duration=params.operation_note.duration,
+            ) if params.operation_note is not None else None,
+            prev_features=params.prev_features,
         )
         
         result = diffusion_model.generate(diffusion_params)

@@ -20,7 +20,10 @@ import { DiffusionSettingsDialog } from './components/dialogs/DiffusionSettingsD
 import { ImportTrackDialog } from './components/dialogs/ImportTrackDialog';
 import { LoadTrackDialog } from './components/dialogs/LoadTrackDialog';
 import { TtmEditDialog } from './components/dialogs/TtmEditDialog';
-import { DEFAULT_NUM_DENOISING_STEPS } from './components/editors/DiffusionSettingsEditor';
+import {
+  DEFAULT_NUM_DENOISING_STEPS,
+  DEFAULT_USE_DDIM,
+} from './components/editors/DiffusionSettingsEditor';
 import { EditPanel } from './components/editPanel/EditPanel';
 import { TIME_SCALE } from './constants/editor';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
@@ -63,6 +66,7 @@ export default function App() {
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackData | null>(null);
   const [numDenoisingSteps, setNumDenoisingSteps] = useState(DEFAULT_NUM_DENOISING_STEPS);
+  const [useDdim, setUseDdim] = useState(DEFAULT_USE_DDIM);
 
   const {
     isPlaying,
@@ -392,6 +396,8 @@ export default function App() {
           onClose={settingsDialog.close}
           numDenoisingSteps={numDenoisingSteps}
           onNumDenoisingStepsChange={setNumDenoisingSteps}
+          useDdim={useDdim}
+          onUseDdimChange={setUseDdim}
         />
       )}
 
@@ -405,6 +411,7 @@ export default function App() {
           setSelectedTrack={setSelectedTrack}
           onTimeLineClick={e => handleTimelineClick(e, true)}
           numDenoisingSteps={numDenoisingSteps}
+          useDdim={useDdim}
         />
       )}
     </ThemeProvider>
