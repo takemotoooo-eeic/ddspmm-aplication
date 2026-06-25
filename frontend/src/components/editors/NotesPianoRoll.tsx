@@ -174,7 +174,7 @@ export const NotesPianoRoll = ({
           pointerEvents: 'none',
         }}
       >
-        <polyline points={points.join(' ')} fill="none" stroke="#646cff" strokeWidth={2} />
+        <polyline points={points.join(' ')} fill="none" stroke="#646cff" strokeWidth={3} />
       </svg>
     );
   };

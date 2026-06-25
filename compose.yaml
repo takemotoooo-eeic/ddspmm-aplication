@@ -52,4 +52,6 @@ services:
       - ./backend/api/controllers/backend_api/openapi/openapi.yml:/opt/backend_api_openapi.yml
     env_file:
       - ./frontend/.env
+    environment:
+      - API_PROXY_TARGET=http://api:8888
 

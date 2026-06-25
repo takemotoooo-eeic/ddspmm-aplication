@@ -19,13 +19,20 @@ import {
 import { INSTRUMENTS, TIME_SCALE } from '../../constants/editor';
 import type { Note } from '../../orval/models/backend-api';
 import { AppMode } from '../../types/appMode';
-import { TrackData, trackNotes } from '../../types/trackData';
+import { ORIGINAL_TRACK_NAME, TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, signalLengthFromDuration } from '../../utils/audio';
 import { LoudnessEditor } from '../editors/LoudnessEditor';
 import { NotesPianoRoll } from '../editors/NotesPianoRoll';
 import { PitchEditor } from '../editors/PitchEditor';
 
 type EditTab = 'pitch' | 'loudness';
+
+type EditorScrollState = {
+  left?: number;
+  pitchTop?: number;
+};
+
+const editorScrollPositions = new Map<string, EditorScrollState>();
 
 interface EditPanelProps {
   appMode: AppMode;
@@ -64,7 +71,12 @@ export const EditPanel = ({
   const showInstrumentSelect = appMode === 'diffusion_ddsp';
 
   const instrumentOptions = Array.from(
-    new Set([...INSTRUMENTS, ...tracks.map(t => t.instrument)]),
+    new Set([
+      ...INSTRUMENTS,
+      ...tracks
+        .map(t => t.instrument)
+        .filter(inst => inst !== ORIGINAL_TRACK_NAME),
+    ]),
   );
 
   const getSignalLength = (): number => {
@@ -139,12 +151,12 @@ export const EditPanel = ({
         const newTracks = tracksRef.current.map(t =>
           t.id === trackId && t.features
             ? {
-                ...t,
-                wavData: wav,
-                features: { ...t.features, ...params, notes },
-                notes,
-                signalLength,
-              }
+              ...t,
+              wavData: wav,
+              features: { ...t.features, ...params, notes },
+              notes,
+              signalLength,
+            }
             : t,
         );
         setTracks(newTracks);
@@ -255,6 +267,14 @@ export const EditPanel = ({
     onTimeLineClick,
     isEditing,
     timeScale: TIME_SCALE,
+  };
+  const scrollState = editorScrollPositions.get(selectedTrack.id);
+
+  const updateEditorScrollState = (patch: EditorScrollState) => {
+    editorScrollPositions.set(selectedTrack.id, {
+      ...editorScrollPositions.get(selectedTrack.id),
+      ...patch,
+    });
   };
 
   return (
@@ -379,10 +399,25 @@ export const EditPanel = ({
             enableNoteDrag={appMode === 'diffusion_ddsp' && !isEditing}
             onNoteDrop={appMode === 'diffusion_ddsp' ? handleNoteDrop : undefined}
             isBusy={isRegenerating}
+            initialScrollPosition={
+              scrollState == null
+                ? undefined
+                : { left: scrollState.left ?? 0, top: scrollState.pitchTop ?? 0 }
+            }
+            onScrollPositionChange={position =>
+              updateEditorScrollState({ left: position.left, pitchTop: position.top })
+            }
           />
         )}
         {!isFluidsynth && editTab === 'loudness' && (
-          <LoudnessEditor {...editorProps} isBusy={isRegenerating} />
+          <LoudnessEditor
+            {...editorProps}
+            isBusy={isRegenerating}
+            initialScrollLeft={scrollState?.left}
+            onScrollLeftChange={scrollLeft =>
+              updateEditorScrollState({ left: scrollLeft })
+            }
+          />
         )}
       </Box>
     </Box>

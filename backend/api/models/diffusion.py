@@ -166,7 +166,7 @@ class DiffusionModel:
                 end_sample = min(end_sample, total_length)
                 
                 if i == 0:
-                    f0_scores[:start_sample] = mean_frequency
+                    f0_scores[:start_sample] = note.frequency
                 else:
                     f0_scores[last_end_sample:start_sample] = last_frequency
                 
@@ -451,6 +451,7 @@ class DiffusionModel:
             f0_score=f0_scores_normalized,
         )
         all_loudness: torch.Tensor = all_loudness_normalized * self.loudness_original_std + self.loudness_original_mean
+        self.logger.info(f"all_loudness: {all_loudness}")
 
         all_f0s_np = all_f0s.squeeze(0).detach().cpu().numpy()  # (L_seg,)
         all_loudnesses_np = all_loudness.squeeze(0).detach().cpu().numpy()  # (L_seg,)

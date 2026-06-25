@@ -19,6 +19,7 @@ export const TrackSidebar = ({
   onVolumeChange,
 }: TrackRowSidebarProps) => {
   const isOriginal = isOriginalTrack(track);
+  const displayName = isOriginal ? 'MIXTURE' : track.name.toUpperCase();
 
   return (
     <Box
@@ -37,7 +38,7 @@ export const TrackSidebar = ({
       }}
       onClick={isOriginal ? undefined : onClick}
     >
-      <Typography variant="h6" sx={{ color: '#fff', minWidth: 120, alignItems: 'center', justifyContent: 'center' }}>{track.name}</Typography>
+      <Typography variant="h6" sx={{ color: '#fff', minWidth: 120, alignItems: 'center', justifyContent: 'center' }}>{displayName}</Typography>
       <Box sx={{ display: 'flex', gap: 1, ml: 'auto', alignItems: 'center' }}>
         <VolumeSlider
           value={track.volume * 128}

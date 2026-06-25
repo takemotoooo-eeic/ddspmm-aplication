@@ -22,7 +22,6 @@ import { LoadTrackDialog } from './components/dialogs/LoadTrackDialog';
 import { TtmEditDialog } from './components/dialogs/TtmEditDialog';
 import { DEFAULT_NUM_DENOISING_STEPS } from './components/editors/DiffusionSettingsEditor';
 import { EditPanel } from './components/editPanel/EditPanel';
-import { ModeSelector } from './components/layout/ModeSelector';
 import { TIME_SCALE } from './constants/editor';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useDisclosure } from './hooks/useDisclosure';
@@ -220,7 +219,7 @@ export default function App() {
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <ModeSelector mode={appMode} onChange={handleModeChange} />
+            {/* <ModeSelector mode={appMode} onChange={handleModeChange} /> */}
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

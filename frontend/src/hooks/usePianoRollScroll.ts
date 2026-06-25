@@ -1,6 +1,13 @@
 import { useCallback, useRef } from 'react';
 
-export function usePianoRollScroll() {
+export interface PianoRollScrollPosition {
+  left: number;
+  top: number;
+}
+
+export function usePianoRollScroll(
+  onScrollChange?: (position: PianoRollScrollPosition) => void,
+) {
   const timelineRef = useRef<HTMLDivElement>(null);
   const pianoRollRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<HTMLDivElement>(null);
@@ -12,7 +19,8 @@ export function usePianoRollScroll() {
     scrollLeftRef.current = scrollLeft;
     if (timelineRef.current) timelineRef.current.scrollLeft = scrollLeft;
     if (pianoRollRef.current) pianoRollRef.current.scrollLeft = scrollLeft;
-  }, []);
+    onScrollChange?.({ left: scrollLeft, top: scrollTopRef.current });
+  }, [onScrollChange]);
 
   const syncScrollTop = useCallback(
     (scrollTop: number, source: 'keys' | 'pianoRoll') => {
@@ -26,8 +34,9 @@ export function usePianoRollScroll() {
         pianoRollRef.current.scrollTop = scrollTop;
       }
       syncingVerticalRef.current = false;
+      onScrollChange?.({ left: scrollLeftRef.current, top: scrollTop });
     },
-    [],
+    [onScrollChange],
   );
 
   const handlePianoRollScroll = useCallback(
@@ -53,7 +62,8 @@ export function usePianoRollScroll() {
     if (keysRef.current) keysRef.current.scrollTop = scrollTop;
     if (pianoRollRef.current) pianoRollRef.current.scrollTop = scrollTop;
     syncingVerticalRef.current = false;
-  }, []);
+    onScrollChange?.({ left: scrollLeftRef.current, top: scrollTop });
+  }, [onScrollChange]);
 
   return {
     timelineRef,

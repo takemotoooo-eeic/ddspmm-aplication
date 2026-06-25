@@ -45,8 +45,8 @@ def convert_midi_to_features(
             
             # 現在の音符の開始位置まで、直前の音符のf0で埋める
             if i == 0:
-                # 最初の音符の場合、開始位置まで平均値で埋める
-                pitch_array[:start_sample] = mean_frequency
+                # 最初の音符の場合、開始位置まで最初の音符のf0で埋める
+                pitch_array[:start_sample] = note.frequency
             else:
                 # 直前の音符のf0で埋める
                 pitch_array[last_end_sample:start_sample] = last_frequency

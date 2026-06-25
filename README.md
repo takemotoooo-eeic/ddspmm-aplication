@@ -215,11 +215,11 @@ docker compose up -d api
 **フロントエンド**（`frontend/.env`）:
 
 ```env
-VITE_API_BASE_URL="http://localhost:8888/backend-api"
+VITE_API_BASE_URL="/backend-api"
 VITE_APP_BASE_URL="http://localhost:3000"
 ```
 
-本番で nginx 経由の場合は、実際のオリジンに合わせて変更してください。
+`VITE_API_BASE_URL` は相対パスにしておくと、nginx 経由（例: SSH トンネルで `https://localhost:8443`）でも API が同じオリジンへ送られます。ポート 3000 の Vite 開発サーバに直接アクセスする場合は、`vite.config.ts` の `/backend-api` プロキシ経由で API に届きます。
 
 **バックエンド**（`backend/.env`、任意）:
 

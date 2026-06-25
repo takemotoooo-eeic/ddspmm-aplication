@@ -1,7 +1,6 @@
 import { Box, CircularProgress } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  LOUDNESS_EDITOR_HEIGHT,
   LOUDNESS_MAX_DB,
   LOUDNESS_MIN_DB,
   PIANO_ROLL_KEY_WIDTH,
@@ -24,21 +23,25 @@ interface LoudnessEditorProps {
   isEditing: boolean;
   timeScale?: number;
   isBusy?: boolean;
+  initialScrollLeft?: number;
+  onScrollLeftChange?: (scrollLeft: number) => void;
 }
 
-const dbToY = (db: number): number => {
+const DEFAULT_EDITOR_HEIGHT = 480;
+
+const dbToY = (db: number, height: number): number => {
   const range = LOUDNESS_MAX_DB - LOUDNESS_MIN_DB;
   const clamped = Math.max(LOUDNESS_MIN_DB, Math.min(LOUDNESS_MAX_DB, db));
-  return LOUDNESS_EDITOR_HEIGHT - ((clamped - LOUDNESS_MIN_DB) / range) * LOUDNESS_EDITOR_HEIGHT;
+  return height - ((clamped - LOUDNESS_MIN_DB) / range) * height;
 };
 
-const yToDb = (y: number): number => {
+const yToDb = (y: number, height: number): number => {
   const range = LOUDNESS_MAX_DB - LOUDNESS_MIN_DB;
-  const db = LOUDNESS_MIN_DB + ((LOUDNESS_EDITOR_HEIGHT - y) / LOUDNESS_EDITOR_HEIGHT) * range;
+  const db = LOUDNESS_MIN_DB + ((height - y) / height) * range;
   return Math.max(LOUDNESS_MIN_DB, Math.min(LOUDNESS_MAX_DB, db));
 };
 
-const DB_TICKS = [-20, -30, -40, -50, -60, -70, -80];
+const DB_TICKS = [0, -20, -40, -60, -80, -100];
 
 export const LoudnessEditor = ({
   currentTime,
@@ -50,9 +53,12 @@ export const LoudnessEditor = ({
   isEditing,
   timeScale = TIME_SCALE,
   isBusy = false,
+  initialScrollLeft,
+  onScrollLeftChange,
 }: LoudnessEditorProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [tempLoudness, setTempLoudness] = useState<number[] | null>(null);
+  const [editorHeight, setEditorHeight] = useState(DEFAULT_EDITOR_HEIGHT);
   const timelineRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const scrollLeftRef = useRef(0);
@@ -66,11 +72,32 @@ export const LoudnessEditor = ({
         : blobDurationSec(selectedTrack.wavData);
   const contentWidth = durationToWidth(durationSec, timeScale);
 
-  const syncScroll = (scrollLeft: number) => {
+  const syncScroll = useCallback((scrollLeft: number) => {
     scrollLeftRef.current = scrollLeft;
     if (timelineRef.current) timelineRef.current.scrollLeft = scrollLeft;
     if (editorRef.current) editorRef.current.scrollLeft = scrollLeft;
-  };
+    onScrollLeftChange?.(scrollLeft);
+  }, [onScrollLeftChange]);
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    const updateHeight = () => {
+      if (el.clientHeight > 0) setEditorHeight(el.clientHeight);
+    };
+    updateHeight();
+
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (initialScrollLeft == null) return;
+    const frame = requestAnimationFrame(() => syncScroll(initialScrollLeft));
+    return () => cancelAnimationFrame(frame);
+  }, [initialScrollLeft, selectedTrack.id, syncScroll]);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isEditing || isBusy || !selectedTrack.features) return;
@@ -85,7 +112,7 @@ export const LoudnessEditor = ({
     const x = event.clientX - rect.left + scrollLeftRef.current;
     const y = event.clientY - rect.top;
     const timeIndex = Math.floor((x / timeScale) * PITCH_SAMPLE_RATE);
-    const newDb = yToDb(y);
+    const newDb = yToDb(y, rect.height || editorHeight);
     if (timeIndex >= 0 && timeIndex < tempLoudness.length) {
       const next = [...tempLoudness];
       next[timeIndex] = newDb;
@@ -109,7 +136,7 @@ export const LoudnessEditor = ({
     .map((db, index) => {
       if (!Number.isFinite(db)) return null;
       const x = (index / PITCH_SAMPLE_RATE) * timeScale;
-      return `${x},${dbToY(db)}`;
+      return `${x},${dbToY(db, editorHeight)}`;
     })
     .filter((p): p is string => p != null)
     .join(' ');
@@ -146,7 +173,7 @@ export const LoudnessEditor = ({
             width: PIANO_ROLL_KEY_WIDTH,
             bgcolor: '#222',
             borderRight: '1px solid #333',
-            height: LOUDNESS_EDITOR_HEIGHT,
+            height: '100%',
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -168,7 +195,7 @@ export const LoudnessEditor = ({
             position: 'relative',
             overflowX: 'auto',
             overflowY: 'hidden',
-            height: LOUDNESS_EDITOR_HEIGHT,
+            height: '100%',
             cursor: isBusy ? 'wait' : isEditing ? 'crosshair' : 'default',
             opacity: isBusy ? 0.6 : 1,
             pointerEvents: isBusy ? 'none' : 'auto',
@@ -179,7 +206,7 @@ export const LoudnessEditor = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <Box sx={{ width: contentWidth, height: LOUDNESS_EDITOR_HEIGHT, position: 'relative' }}>
+          <Box sx={{ width: contentWidth, height: '100%', position: 'relative' }}>
             <PlaybackCursor
               currentTime={currentTime}
               durationSec={durationSec}
@@ -196,7 +223,7 @@ export const LoudnessEditor = ({
               }}
             >
               {points.length > 0 && (
-                <polyline points={points} fill="none" stroke="#646cff" strokeWidth={2} />
+                <polyline points={points} fill="none" stroke="#646cff" strokeWidth={3} />
               )}
             </svg>
           </Box>

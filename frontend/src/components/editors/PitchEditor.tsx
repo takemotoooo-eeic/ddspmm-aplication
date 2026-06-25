@@ -8,7 +8,10 @@ import {
   TIME_SCALE,
 } from '../../constants/editor';
 import { keys, octaves, PIANO_ROLL_HEIGHT } from '../../constants/pianoRoll';
-import { usePianoRollScroll } from '../../hooks/usePianoRollScroll';
+import {
+  type PianoRollScrollPosition,
+  usePianoRollScroll,
+} from '../../hooks/usePianoRollScroll';
 import type { Note } from '../../orval/models/backend-api';
 import { TrackData, trackNotes } from '../../types/trackData';
 import { blobDurationSec, durationToWidth } from '../../utils/audio';
@@ -41,8 +44,10 @@ interface PitchEditorProps {
   /** Edit オフ時: ノートを半音単位でドラッグ可能 */
   enableNoteDrag?: boolean;
   /** ノートドロップ後に diffusion/generate → feature 更新（非同期） */
-  onNoteDrop?: (notes: Note[]) => void;
+  onNoteDrop?: (notes: Note[], affectedRangeSec?: { start: number; end: number }) => void;
   isBusy?: boolean;
+  initialScrollPosition?: PianoRollScrollPosition;
+  onScrollPositionChange?: (position: PianoRollScrollPosition) => void;
 }
 
 export const PitchEditor = ({
@@ -57,6 +62,8 @@ export const PitchEditor = ({
   enableNoteDrag = false,
   onNoteDrop,
   isBusy = false,
+  initialScrollPosition,
+  onScrollPositionChange,
 }: PitchEditorProps) => {
   const [isDraggingPitch, setIsDraggingPitch] = useState(false);
   const [tempPitch, setTempPitch] = useState<number[] | null>(null);
@@ -68,6 +75,7 @@ export const PitchEditor = ({
     frequency: number;
   } | null>(null);
   const [drawBaseNotes, setDrawBaseNotes] = useState<Note[] | null>(null);
+  const noteDragOriginalRef = useRef<Note | null>(null);
   const noteGrabOffsetXRef = useRef(0);
   const noteDragMovedRef = useRef(false);
   const {
@@ -80,7 +88,7 @@ export const PitchEditor = ({
     syncScrollTopTo,
     handlePianoRollScroll,
     handleKeysScroll,
-  } = usePianoRollScroll();
+  } = usePianoRollScroll(onScrollPositionChange);
 
   const pitchForScroll = selectedTrack.features?.pitch ?? [];
   const pitchData = tempPitch ?? pitchForScroll;
@@ -159,11 +167,23 @@ export const PitchEditor = ({
     if (draggedNoteIndex === null || !tempNotes) return;
     const notes = tempNotes;
     if (noteDragMovedRef.current) {
-      onNoteDrop?.(notes);
+      const draggedNote = notes[draggedNoteIndex];
+      const originalNote = noteDragOriginalRef.current;
+      if (draggedNote && originalNote) {
+        const start = Math.min(originalNote.start, draggedNote.start);
+        const end = Math.max(
+          originalNote.start + originalNote.duration,
+          draggedNote.start + draggedNote.duration,
+        );
+        onNoteDrop?.(notes, { start, end });
+      } else {
+        onNoteDrop?.(notes);
+      }
     }
     setDraggedNoteIndex(null);
     setTempNotes(null);
     noteDragMovedRef.current = false;
+    noteDragOriginalRef.current = null;
   }, [draggedNoteIndex, onNoteDrop, tempNotes]);
 
   const finishNoteDraw = useCallback(() => {
@@ -177,7 +197,7 @@ export const PitchEditor = ({
     setDrawBaseNotes(null);
     if (duration < MIN_NOTE_DURATION_SEC) return;
     const finalNotes = applyMonophonicInsert(drawBaseNotes, { start, duration, frequency });
-    onNoteDrop?.(finalNotes);
+    onNoteDrop?.(finalNotes, { start, end: start + duration });
   }, [drawBaseNotes, noteDraw, onNoteDrop]);
 
   const updateNoteDraw = useCallback(
@@ -221,6 +241,21 @@ export const PitchEditor = ({
   }, [draggedNoteIndex, enableNoteDrag, finishNoteDrag, updateDraggedNote]);
 
   useEffect(() => {
+    if (!initialScrollPosition) return;
+    const frame = requestAnimationFrame(() => {
+      syncScrollLeft(initialScrollPosition.left);
+      syncScrollTopTo(initialScrollPosition.top);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    initialScrollPosition,
+    selectedTrack.id,
+    syncScrollLeft,
+    syncScrollTopTo,
+  ]);
+
+  useEffect(() => {
+    if (initialScrollPosition) return;
     const frame = requestAnimationFrame(() => {
       const el = pianoRollRef.current;
       if (!el) return;
@@ -240,7 +275,7 @@ export const PitchEditor = ({
       syncScrollTopTo(Math.max(0, Math.min(maxScroll, midY - viewH / 2)));
     });
     return () => cancelAnimationFrame(frame);
-  }, [selectedTrack.id, pitchForScroll, notesToRender, syncScrollTopTo]);
+  }, [initialScrollPosition, selectedTrack.id, pitchForScroll, notesToRender, syncScrollTopTo]);
 
   const commitPitch = (pitch: number[]) => {
     if (!selectedTrack.features) return;
@@ -314,6 +349,7 @@ export const PitchEditor = ({
     const notes = [...trackNotes(selectedTrack)];
     noteGrabOffsetXRef.current = coords.x - notes[index].start * timeScale;
     noteDragMovedRef.current = false;
+    noteDragOriginalRef.current = { ...notes[index] };
     setDraggedNoteIndex(index);
     setTempNotes(notes);
   };
@@ -325,8 +361,9 @@ export const PitchEditor = ({
     setDraggedNoteIndex(null);
     setTempNotes(null);
     noteDragMovedRef.current = false;
+    noteDragOriginalRef.current = null;
     const notes = removeNote(trackNotes(selectedTrack), note);
-    onNoteDrop?.(notes);
+    onNoteDrop?.(notes, { start: note.start, end: note.start + note.duration });
   };
 
   const pianoRollCursor = isBusy ? 'wait' : isEditing || enableNoteDrag ? 'crosshair' : 'default';
@@ -536,7 +573,7 @@ export const PitchEditor = ({
                   points={pitchPolylinePoints}
                   fill="none"
                   stroke="#646cff"
-                  strokeWidth={2}
+                  strokeWidth={3}
                 />
               )}
             </svg>

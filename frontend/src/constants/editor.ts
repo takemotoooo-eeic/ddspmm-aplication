@@ -11,8 +11,8 @@ export const TTM_EDGE_SCROLL_MARGIN_PX = 56;
 /** 端スクロール時の最大速度（1 フレームあたりの scrollLeft 変化量）[px] */
 export const TTM_EDGE_SCROLL_SPEED_PX = 22;
 
-export const LOUDNESS_MIN_DB = -80;
-export const LOUDNESS_MAX_DB = -20;
+export const LOUDNESS_MIN_DB = -100;
+export const LOUDNESS_MAX_DB = 0;
 export const LOUDNESS_EDITOR_HEIGHT = 480;
 
 export const NOTE_HEIGHT = 30;
