@@ -54,6 +54,9 @@ class DiffusionTrainInput(BaseModel):
     midi: list[AlignedMidi]
 
 
+INPAINT_MASK_PADDING_FRAMES = 2
+
+
 class DiffusionModel:
     """Diffusionモデルを使用して合成パラメータを生成するクラス"""
     
@@ -708,11 +711,13 @@ class DiffusionModel:
         for changed_start, changed_end in changed_ranges:
             feature_start = max(
                 0,
-                int(np.floor(changed_start * DEFAULT_SAMPLING_RATE / block_size)),
+                int(np.floor(changed_start * DEFAULT_SAMPLING_RATE / block_size))
+                - INPAINT_MASK_PADDING_FRAMES,
             )
             feature_end = min(
                 feature_length,
-                int(np.ceil(changed_end * DEFAULT_SAMPLING_RATE / block_size)),
+                int(np.ceil(changed_end * DEFAULT_SAMPLING_RATE / block_size))
+                + INPAINT_MASK_PADDING_FRAMES,
             )
             if feature_end <= feature_start:
                 feature_end = min(feature_length, feature_start + 1)
@@ -772,27 +777,27 @@ class DiffusionModel:
             ]
 
         if operation == "resize" and prev_note is not None and note is not None:
-            return [self._resize_changed_range(prev_note, note)]
+            return self._resize_changed_ranges(prev_note, note)
 
         return []
 
-    def _resize_changed_range(self, prev_note: Note, note: Note) -> tuple[float, float]:
+    def _resize_changed_ranges(self, prev_note: Note, note: Note) -> list[tuple[float, float]]:
         prev_start = prev_note.start
         prev_end = prev_note.start + prev_note.duration
         note_start = note.start
         note_end = note.start + note.duration
-        if self._contains_interval(prev_start, prev_end, note_start, note_end):
-            return prev_start, prev_end
-        return note_start, note_end
 
-    def _contains_interval(
-        self,
-        outer_start: float,
-        outer_end: float,
-        inner_start: float,
-        inner_end: float,
-    ) -> bool:
-        return outer_start <= inner_start and inner_end <= outer_end
+        ranges: list[tuple[float, float]] = []
+        if prev_start < note_start:
+            ranges.append((prev_start, min(prev_end, note_start)))
+        if note_end < prev_end:
+            ranges.append((max(prev_start, note_end), prev_end))
+        if note_start < prev_start:
+            ranges.append((note_start, min(note_end, prev_start)))
+        if prev_end < note_end:
+            ranges.append((max(note_start, prev_end), note_end))
+
+        return [(start, end) for start, end in ranges if end > start]
 
     def _merge_partial_features(
         self,
